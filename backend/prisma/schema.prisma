@@ -1,0 +1,91 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  uid          String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         String    @default("user") // "admin" | "moderator" | "user"
+  name         String
+  displayName  String
+  businessName String?
+  phone        String?
+  blocked      Boolean   @default(false)
+  isActive     Boolean   @default(true)
+  commentCount Int       @default(0)
+  lastReset    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignedComplaints Complaint[] @relation("AssignedModerator")
+
+  @@map("users")
+}
+
+model Complaint {
+  id             String          @id // Equals ticketId e.g. "MIOM-0001"
+  ticketId       String          @unique
+  name           String
+  email          String
+  phone          String
+  employeeId     String
+  department     String
+  designation    String
+  category       String // "Computer Complaint" | "CCTV Complaint" | "Network Complaint" | "Others"
+  title          String
+  description    String
+  priority       String          @default("medium") // "low" | "medium" | "high"
+  imageUrl       String?
+  uid            String?
+  userEmail      String?
+  status         String          @default("pending") // "pending" | "assigned" | "active" | "resolved" | "rejected"
+  assignedTo     String?
+  assignedToUID  String?
+  assignedToName String?
+  lastCommentAt  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  assignedModerator User?          @relation("AssignedModerator", fields: [assignedToUID], references: [uid], onDelete: SetNull)
+  notes             ComplaintNote[]
+
+  @@map("complaints")
+}
+
+model ComplaintNote {
+  id          String   @id @default(cuid())
+  complaintId String
+  noteType    String   // "adminToModerator" | "moderatorToAdmin" | "adminToUser"
+  content     String
+  authorEmail String
+  authorName  String
+  createdAt   DateTime @default(now())
+
+  complaint   Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@map("complaint_notes")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userEmail String
+  message   String
+  type      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model TicketCounter {
+  id            Int @id @default(1)
+  currentNumber Int @default(0)
+
+  @@map("ticket_counter")
+}

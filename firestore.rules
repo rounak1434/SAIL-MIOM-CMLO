@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPER FUNCTIONS (Strict Authoritative Custom Claims)
+    // ============================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Super Admin strictly authorized via Firebase Auth custom claim only
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.superAdmin == true;
+    }
+
+    // Admin authorized via custom claim, Super Admin, or verified Firestore admin profile
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true)
+      );
+    }
+
+    // Moderator authorized via custom claim, Admin, or Super Admin
+    function isModerator() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'moderator' ||
+        isAdmin()
+      );
+    }
+
+    // System license check for write operations
+    function isLicenseExpired() {
+      return exists(/databases/$(database)/documents/systemSettings/serviceLicense) &&
+             get(/databases/$(database)/documents/systemSettings/serviceLicense).data.enabled == true &&
+             request.time >= get(/databases/$(database)/documents/systemSettings/serviceLicense).data.expiresAt;
+    }
+
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // READ: Users can read own doc; Admin can read all; Authenticated staff can read moderators list
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        (resource.data.role == 'moderator' && isModerator())
+      );
+
+      // CREATE: Users create own profile on registration strictly as role='user'
+      allow create: if isAuthenticated() && (
+        (request.auth.uid == userId &&
+         request.resource.data.role == 'user' &&
+         request.resource.data.blocked == false &&
+         request.resource.data.isActive == true &&
+         !('permissions' in request.resource.data))
+        || isAdmin()
+      );
+
+      // UPDATE: Admins can update; Users can only update their profile info (not role, blocked, isActive, superAdmin)
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid == userId &&
+         resource.data.blocked != true &&
+         resource.data.isActive != false &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin']))
+      );
+
+      // DELETE: Admins only
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // COMPLAINTS COLLECTION
+    // ============================================
+    match /complaints/{complaintId} {
+      // CREATE: Allowed for public guests & authenticated users when license is valid (or Super Admin)
+      allow create: if (!isLicenseExpired() || isSuperAdmin()) &&
+        request.resource.data.keys().hasAll([
+          'ticketId', 'name', 'email', 'phone', 'employeeId', 'department',
+          'designation', 'category', 'title', 'description', 'priority', 'status', 'createdAt'
+        ]) && request.resource.data.status == 'pending';
+
+      // READ: Single complaint trackable by ID; Full listing restricted to staff
+      allow get: if true;
+      allow list: if isModerator() || isAdmin();
+
+      // UPDATE: Restricted to authorized staff (when license is valid, or Super Admin)
+      allow update: if (!isLicenseExpired() && (isModerator() || isAdmin())) || isSuperAdmin();
+
+      // DELETE: Admin only
+      allow delete: if isAdmin() || isSuperAdmin();
+
+      // ============================================
+      // COMPLAINT NOTES SUBCOLLECTION
+      // ============================================
+      match /notes/{noteId} {
+        // READ: Staff can read notes; AdminToUser notes can be viewed by submitter/guest via complaint view
+        allow read: if isModerator() || isAdmin() || resource.data.noteType == 'adminToUser';
+
+        // CREATE: Authorized staff only; Author email must match logged-in user (when license valid or Super Admin)
+        allow create: if ((!isLicenseExpired() && (isModerator() || isAdmin())) || isSuperAdmin()) &&
+          request.resource.data.keys().hasAll(['noteType', 'content', 'authorEmail', 'authorName', 'createdAt']) &&
+          request.resource.data.authorEmail == request.auth.token.email &&
+          request.resource.data.noteType in ['adminToModerator', 'moderatorToAdmin', 'adminToUser'];
+
+        // UPDATE: Notes are immutable audit logs
+        allow update: if false;
+
+        // DELETE: Admin only
+        allow delete: if isAdmin() || isSuperAdmin();
+      }
+    }
+
+    // ============================================
+    // SYSTEM SETTINGS / SERVICE LICENSE
+    // ============================================
+    match /systemSettings/{configDoc} {
+      // License configuration is publicly readable so clients can evaluate expiration
+      allow read: if true;
+      // Write and state modification strictly restricted to verified Super Admin custom claim
+      allow write: if isSuperAdmin();
+    }
+
+    // ============================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================
+    match /notifications/{notificationId} {
+      // READ: Users can only read notifications directed to their email
+      allow read: if isAuthenticated() && resource.data.userEmail == request.auth.token.email;
+
+      // CREATE: Authenticated users / staff
+      allow create: if isAuthenticated();
+
+      // UPDATE: Mark as read only
+      allow update: if isAuthenticated() &&
+                     resource.data.userEmail == request.auth.token.email &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt']);
+
+      // DELETE: Recipient user or Admin
+      allow delete: if isAuthenticated() && (
+        resource.data.userEmail == request.auth.token.email || isAdmin()
+      );
+    }
+
+    // ============================================
+    // COUNTERS COLLECTION
+    // ============================================
+    match /counters/{counterId} {
+      allow read: if true;
+
+      // Atomic increments allowed for ticket creation and staff dashboard counters
+      allow create, update: if (
+        counterId == 'tickets' ||
+        counterId == 'stats'
+      );
+    }
+
+    // ============================================
+    // RATE LIMITS COLLECTION (24h Submission Lock)
+    // ============================================
+    match /rateLimits/{lockId} {
+      allow read: if true;
+
+      // Rate limit locks can only be written if timestamp matches request.time
+      allow write: if (lockId.matches('^email_.*') || lockId.matches('^phone_.*'))
+                   && request.resource.data.keys().hasOnly(['lastSubmittedAt'])
+                   && request.resource.data.lastSubmittedAt == request.time;
+    }
+
+    // ============================================
+    // DENY ALL OTHER COLLECTIONS
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

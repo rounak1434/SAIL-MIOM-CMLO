@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+>
+  <!-- Home / Landing Page -->
+  <url>
+    <loc>https://complaint-management-sys-1266f.web.app/</loc>
+    <lastmod>2026-06-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Login Page -->
+  <url>
+    <loc>https://complaint-management-sys-1266f.web.app/login</loc>
+    <lastmod>2026-06-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!--
+    NOTE: Authenticated/private routes (dashboard, complaints, admin, profile)
+    are intentionally excluded from the sitemap and blocked in robots.txt.
+    Only add public, non-gated pages here.
+  -->
+</urlset>

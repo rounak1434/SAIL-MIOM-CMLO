@@ -1,0 +1,15 @@
+# robots.txt — SAIL-MIOM House Management System
+# https://complaint-management-sys-1266f.web.app
+
+User-agent: *
+Allow: /
+
+# Block authenticated/private app routes from search engines
+Disallow: /dashboard
+Disallow: /complaints
+Disallow: /admin
+Disallow: /profile
+Disallow: /settings
+
+# Sitemap location
+Sitemap: https://complaint-management-sys-1266f.web.app/sitemap.xml

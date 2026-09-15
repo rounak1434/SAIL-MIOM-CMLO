@@ -14,6 +14,7 @@ import {
   Navigation,
   Zap,
   ArrowRight,
+  Phone,
 } from 'lucide-react';
 import { subscribeToComplaintStats, ComplaintStats } from '../services/complaint.service';
 
@@ -329,6 +330,73 @@ const Home = () => {
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div className="w-full">
+                    <h3 className="text-sm font-semibold text-[#111827] dark:text-[#F9FAFB] mb-2.5">
+                      Helpdesk Contacts
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#111318] border border-[#E5E7EB] dark:border-[#2B313B]">
+                        <div>
+                          <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">
+                            N K Sonkusare
+                          </p>
+                          <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                            GM I/c (Elect)
+                          </p>
+                        </div>
+                        <a
+                          href="tel:8986881139"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#181B21] border border-[#E5E7EB] dark:border-[#2B313B] text-sm font-semibold text-[#2563EB] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shadow-xs"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>8986881139</span>
+                        </a>
+                      </div>
+
+                      <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#111318] border border-[#E5E7EB] dark:border-[#2B313B]">
+                        <div>
+                          <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">
+                            Vikas Aanad
+                          </p>
+                          <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                            Mgr (Elect)
+                          </p>
+                        </div>
+                        <a
+                          href="tel:8986881009"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#181B21] border border-[#E5E7EB] dark:border-[#2B313B] text-sm font-semibold text-[#2563EB] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shadow-xs"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>8986881009</span>
+                        </a>
+                      </div>
+
+                      <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#111318] border border-[#E5E7EB] dark:border-[#2B313B]">
+                        <div>
+                          <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">
+                            Mohan Nag
+                          </p>
+                          <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                            Jr Engg
+                          </p>
+                        </div>
+                        <a
+                          href="tel:7633824775"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#181B21] border border-[#E5E7EB] dark:border-[#2B313B] text-sm font-semibold text-[#2563EB] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors shadow-xs"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>7633824775</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
 
                 <div className="flex items-start gap-4">
                   <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">

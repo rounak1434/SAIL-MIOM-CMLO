@@ -186,7 +186,7 @@ const TrackComplaintContent = () => {
                 type="text"
                 value={complaintId}
                 onChange={(e) => setComplaintId(e.target.value)}
-                placeholder="Enter Ticket ID (e.g. MIOM-98234 or TCK-ALYPTV)"
+                placeholder="Enter Ticket ID (e.g. MIOM-EL-2026-0001 or MIOM-0001)"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all font-mono uppercase"
               />
             </div>

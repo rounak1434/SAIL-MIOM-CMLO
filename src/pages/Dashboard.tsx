@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileText, Clock, TrendingUp, CheckCircle, XCircle, Users, 
-  Trash2, Eye, UserPlus, Mail, Phone, Building2, Lock, User, Printer, Calendar, ShieldCheck
+  Trash2, Eye, UserPlus, Mail, Phone, Building2, Lock, User, Printer, Calendar, ShieldCheck,
+  FileSpreadsheet, Download
 } from 'lucide-react';
+import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExport';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   subscribeToAllComplaints, 
@@ -1023,7 +1025,7 @@ const Dashboard = () => {
                           )}
                         </td>
                         <td className="py-3 px-4 text-xs">
-                          <div className="flex gap-2 items-center">
+                          <div className="flex gap-1.5 items-center">
                             <button
                               onClick={() => setSelectedComplaint(complaint)}
                               className="p-1 rounded text-[#2563EB] hover:bg-blue-50 dark:hover:bg-blue-950/40"
@@ -1032,8 +1034,22 @@ const Dashboard = () => {
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handlePrintSingle(complaint)}
+                              onClick={() => downloadComplaintExcel(complaint)}
                               className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              title="Download Excel (.xlsx)"
+                            >
+                              <FileSpreadsheet className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => downloadComplaintPDF(complaint)}
+                              className="p-1 rounded text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              title="Download PDF (.pdf)"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handlePrintSingle(complaint)}
+                              className="p-1 rounded text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
                               title="Print Complaint"
                             >
                               <Printer className="w-4 h-4" />
@@ -1092,6 +1108,34 @@ const Dashboard = () => {
                         </div>
                         <div>
                           {getStatusBadge(selectedComplaint.status)}
+                        </div>
+                      </div>
+
+                      {/* Download Complaint Bar */}
+                      <div className="flex items-center justify-between flex-wrap gap-2.5 p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
+                        <span className="text-xs font-semibold text-[#4B5563] dark:text-[#9CA3AF] flex items-center gap-1.5">
+                          <Download className="w-3.5 h-3.5 text-[#2563EB]" />
+                          Download Record:
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => downloadComplaintExcel(selectedComplaint)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                            title="Download Excel Workbook"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>Download Excel</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadComplaintPDF(selectedComplaint)}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                            title="Download PDF Document"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download PDF</span>
+                          </button>
                         </div>
                       </div>
                       

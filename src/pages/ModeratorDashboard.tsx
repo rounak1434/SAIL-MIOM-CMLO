@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Clock, TrendingUp, CheckCircle, Eye, MessageSquare, Zap } from 'lucide-react';
+import { FileText, Clock, TrendingUp, CheckCircle, Eye, MessageSquare, Zap, FileSpreadsheet, Download } from 'lucide-react';
+import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExport';
 import { 
   subscribeToModeratorComplaints, 
   Complaint,
@@ -201,16 +202,33 @@ const ModeratorDashboard = () => {
                       <td className="py-3 px-4 text-xs">{getStatusBadge(complaint.status)}</td>
                       <td className="py-3 px-4 text-xs">{getPriorityBadge(complaint.priority)}</td>
                       <td className="py-3 px-4 text-xs">
-                        <button
-                          onClick={() => {
-                            setSelectedComplaint(complaint);
-                            setModeratorNote('');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View &amp; Update</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedComplaint(complaint);
+                              setModeratorNote('');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1 transition-colors shadow-xs"
+                            title="View & Update"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => downloadComplaintExcel(complaint)}
+                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-[#E5E7EB] dark:border-[#2B313B]"
+                            title="Download Excel (.xlsx)"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => downloadComplaintPDF(complaint)}
+                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E7EB] dark:border-[#2B313B]"
+                            title="Download PDF (.pdf)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -258,6 +276,34 @@ const ModeratorDashboard = () => {
                     </div>
                     <div>
                       {getStatusBadge(selectedComplaint.status)}
+                    </div>
+                  </div>
+
+                  {/* Download Complaint Bar */}
+                  <div className="flex items-center justify-between flex-wrap gap-2.5 p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
+                    <span className="text-xs font-semibold text-[#4B5563] dark:text-[#9CA3AF] flex items-center gap-1.5">
+                      <Download className="w-3.5 h-3.5 text-[#2563EB]" />
+                      Download Record:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => downloadComplaintExcel(selectedComplaint)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                        title="Download Excel Workbook"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <span>Download Excel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => downloadComplaintPDF(selectedComplaint)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                        title="Download PDF Document"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download PDF</span>
+                      </button>
                     </div>
                   </div>
                   

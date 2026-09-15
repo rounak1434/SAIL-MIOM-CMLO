@@ -216,19 +216,43 @@ export const createComplaint = async (
       }
     }
 
-    // 2. Atomic counter increment
+    // 2. Atomic counter increment by year
+    const currentYear = new Date().getFullYear();
     const counterDoc = await transaction.get(counterRef);
     let nextNum = 1;
+    let yearlyHistory: Record<string, number> = {};
 
     if (counterDoc.exists()) {
-      nextNum = (counterDoc.data().currentNumber || 0) + 1;
+      const counterData = counterDoc.data();
+      const docYear = counterData.currentYear;
+      yearlyHistory = counterData.yearly || {};
+
+      if (docYear === currentYear) {
+        nextNum = (counterData.currentNumber || 0) + 1;
+      } else {
+        if (docYear) {
+          yearlyHistory[String(docYear)] = counterData.currentNumber || 0;
+        }
+        nextNum = (yearlyHistory[String(currentYear)] || 0) + 1;
+      }
     }
 
-    const generatedTicketId = `MIOM-${String(nextNum).padStart(4, '0')}`;
+    yearlyHistory[String(currentYear)] = nextNum;
+
+    const sequenceStr = String(nextNum).padStart(4, '0');
+    const generatedTicketId = `MIOM-EL-${currentYear}-${sequenceStr}`;
     const complaintRef = doc(db, 'complaints', generatedTicketId);
 
     // 3. Set Ticket Counter
-    transaction.set(counterRef, { currentNumber: nextNum }, { merge: true });
+    transaction.set(
+      counterRef,
+      {
+        currentYear,
+        currentNumber: nextNum,
+        yearly: yearlyHistory,
+      },
+      { merge: true }
+    );
 
     // 4. Create Complaint Document
     transaction.set(complaintRef, {

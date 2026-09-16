@@ -243,9 +243,40 @@ export const updateUserProfilePhoto = async (
 };
 
 /**
- * Send password reset email via Firebase Auth
+ * Send password reset email via official Firebase Authentication SDK
+ * Enforces email validation and safe error mapping
  */
-export const resetUserPassword = async (email: string): Promise<void> => {
+export const sendUserPasswordReset = async (email: string): Promise<void> => {
   const cleanEmail = email.trim().toLowerCase();
-  await sendPasswordResetEmail(auth, cleanEmail);
+  if (!cleanEmail) {
+    throw new Error('Please enter your email address.');
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  try {
+    await sendPasswordResetEmail(auth, cleanEmail);
+  } catch (err: any) {
+    console.error('Firebase sendPasswordResetEmail error:', err);
+    const code = err?.code;
+    if (code === 'auth/invalid-email') {
+      throw new Error('Please enter a valid email address.');
+    }
+    if (code === 'auth/user-not-found') {
+      // Safe non-disclosing behavior: do not leak whether account exists
+      return;
+    }
+    if (code === 'auth/too-many-requests') {
+      throw new Error('Too many reset attempts. Please wait and try again later.');
+    }
+    if (code === 'auth/network-request-failed') {
+      throw new Error('Network error. Please check your internet connection and try again.');
+    }
+    throw new Error('An error occurred while sending the password reset email. Please try again.');
+  }
 };
+
+export const resetUserPassword = sendUserPasswordReset;
+

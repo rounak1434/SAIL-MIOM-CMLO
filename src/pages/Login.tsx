@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { loginUser, logoutUser } from '../services/auth.service';
+import { loginUser, logoutUser, sendUserPasswordReset } from '../services/auth.service';
 import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const Login = () => {
@@ -39,8 +39,15 @@ export const Login = () => {
   const handleForgotPassword = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!email) {
-      setError('Please enter your email address');
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
@@ -48,13 +55,17 @@ export const Login = () => {
     setSuccess('');
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      await sendUserPasswordReset(cleanEmail);
       setSuccess(
-        'Password reset request noted. Please contact your SAIL-MIOM system administrator.'
+        'Password reset email sent. Please check your inbox. Also check your Spam, Junk, and Promotions folders.'
       );
-      setEmail('');
+    } catch (err: any) {
+      console.error('Forgot password error:', err);
+      setError(err?.message || 'Failed to send password reset email. Please try again.');
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -255,10 +266,10 @@ export const Login = () => {
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Sending Request...</span>
+                    <span>Sending reset email...</span>
                   </>
                 ) : (
-                  <span>Request Reset</span>
+                  <span>Send Password Reset Link</span>
                 )}
               </button>
 

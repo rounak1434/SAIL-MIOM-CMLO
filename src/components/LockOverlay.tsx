@@ -11,11 +11,13 @@ import {
   LogOut,
   Calendar,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Mail
 } from 'lucide-react';
 import { signInWithEmailAndPassword, signOut, getIdTokenResult } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { sendUserPasswordReset } from '../services/auth.service';
 import { 
   ServiceLicense, 
   isLicenseExpired, 
@@ -45,6 +47,12 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Super Admin forgot password states
+  const [isForgotMode, setIsForgotMode] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   // License management action states inside modal
   const [actionProcessing, setActionProcessing] = useState(false);
@@ -113,6 +121,11 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
     if (recentClicks.length >= 5) {
       clickTimestamps.current = [];
       setIsModalOpen(true);
+      setEmail('');
+      setPassword('');
+      setIsForgotMode(false);
+      setResetSuccess(null);
+      setResetError(null);
       setAuthError(null);
       setActionSuccess(null);
       setActionError(null);
@@ -158,6 +171,38 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
       }
     } finally {
       setIsAuthenticating(false);
+    }
+  };
+
+  // Handle Super Admin Password Reset
+  const handleSuperAdminForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setResetSuccess(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setResetError('Please enter your Super Admin email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setResetError('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      await sendUserPasswordReset(cleanEmail);
+      setResetSuccess(
+        'Password reset email sent. Please check your inbox. Also check your Spam, Junk, and Promotions folders.'
+      );
+    } catch (err: any) {
+      console.error('Super Admin password reset error:', err);
+      setResetError(err?.message || 'Failed to send password reset email. Please try again.');
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -292,7 +337,15 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
             >
               {/* Close Button */}
               <button 
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEmail('');
+                  setPassword('');
+                  setIsForgotMode(false);
+                  setResetSuccess(null);
+                  setResetError(null);
+                  setAuthError(null);
+                }}
                 className="absolute top-4 right-4 p-1.5 text-[#6B7280] hover:text-[#111827] dark:text-[#9CA3AF] dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-[#1E232B] transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -393,6 +446,78 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
                     </button>
                   </div>
                 </div>
+              ) : isForgotMode ? (
+                /* Super Admin Forgot Password Form */
+                <form onSubmit={handleSuperAdminForgotPassword} className="space-y-3.5">
+                  <div className="text-center pb-1">
+                    <p className="text-xs font-semibold text-[#111827] dark:text-[#F9FAFB]">
+                      Reset Super Admin Password
+                    </p>
+                    <p className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">
+                      Enter your Super Admin email to receive a password reset link.
+                    </p>
+                  </div>
+
+                  {resetSuccess && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
+                      <Mail className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>{resetSuccess}</span>
+                    </div>
+                  )}
+
+                  {resetError && (
+                    <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{resetError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-[#374151] dark:text-[#D1D5DB] mb-1">
+                      Super Admin Email
+                    </label>
+                    <input 
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter Super Admin email"
+                      className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-[#D1D5DB] dark:border-[#374151] rounded-xl text-xs text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSendingReset}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-xs transition-all mt-1"
+                  >
+                    {isSendingReset ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Sending reset email...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-4 h-4" />
+                        <span>Send Password Reset Link</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotMode(false);
+                        setResetError(null);
+                        setResetSuccess(null);
+                      }}
+                      className="text-xs font-medium text-[#4B5563] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white transition-colors"
+                    >
+                      ← Back to Super Admin Sign In
+                    </button>
+                  </div>
+                </form>
               ) : (
                 /* Super Admin Authentication Form */
                 <form onSubmit={handleSuperAdminLogin} className="space-y-3.5">
@@ -412,15 +537,29 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@sail-miom.in"
+                      placeholder="Enter Super Admin email"
                       className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-[#D1D5DB] dark:border-[#374151] rounded-xl text-xs text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-[#374151] dark:text-[#D1D5DB] mb-1">
-                      Password
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-[#374151] dark:text-[#D1D5DB]">
+                        Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsForgotMode(true);
+                          setAuthError(null);
+                          setResetSuccess(null);
+                          setResetError(null);
+                        }}
+                        className="text-[11px] font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
                     <input 
                       type="password"
                       required

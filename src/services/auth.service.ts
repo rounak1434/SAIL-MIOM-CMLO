@@ -12,6 +12,9 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -279,4 +282,57 @@ export const sendUserPasswordReset = async (email: string): Promise<void> => {
 };
 
 export const resetUserPassword = sendUserPasswordReset;
+
+/**
+ * Change the password for the currently authenticated user using official Firebase Auth SDK.
+ * Executes reauthenticateWithCredential followed by updatePassword.
+ */
+export const changeCurrentUserPassword = async (
+  currentPassword: string,
+  newPassword: string
+): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('User not authenticated. Please sign in again.');
+  }
+
+  // Check if account uses password authentication
+  const hasPasswordProvider = user.providerData.some(
+    (p) => p.providerId === 'password'
+  );
+  if (!hasPasswordProvider) {
+    throw new Error(
+      'Password changes are available for accounts using email and password authentication.'
+    );
+  }
+
+  try {
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      throw new Error('Current password is incorrect.');
+    }
+    if (code === 'auth/weak-password') {
+      throw new Error('The new password does not meet the minimum requirements.');
+    }
+    if (code === 'auth/requires-recent-login') {
+      throw new Error('Please sign in again and then try changing your password.');
+    }
+    if (code === 'auth/network-request-failed') {
+      throw new Error('Network error. Please check your internet connection and try again.');
+    }
+    if (code === 'auth/too-many-requests') {
+      throw new Error('Too many attempts. Please try again later.');
+    }
+    // Safe error message fallback without leaking raw internal Firebase errors
+    throw new Error(
+      err?.message && !err.message.includes('Firebase')
+        ? err.message
+        : 'Failed to update password. Please check your current password and try again.'
+    );
+  }
+};
 

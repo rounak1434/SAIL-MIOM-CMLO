@@ -56,7 +56,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [adminBusinessName, setAdminBusinessName] = useState('');
+  const [adminDesignation, setAdminDesignation] = useState('');
   const [adminPhone, setAdminPhone] = useState('');
   const [adminFormError, setAdminFormError] = useState<string | null>(null);
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
@@ -72,7 +72,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
     const trimmedName = adminName.trim();
     const trimmedEmail = adminEmail.trim().toLowerCase();
     const trimmedPassword = adminPassword.trim();
-    const trimmedBusiness = adminBusinessName.trim();
+    const trimmedDesignation = adminDesignation.trim();
     const trimmedPhone = adminPhone.trim();
 
     if (!trimmedName) {
@@ -117,7 +117,8 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
         name: trimmedName,
         displayName: trimmedName,
         role: 'admin',
-        businessName: trimmedBusiness || '',
+        designation: trimmedDesignation || '',
+        businessName: trimmedDesignation || '',
         phone: trimmedPhone || '',
         blocked: false,
         isActive: true,
@@ -135,7 +136,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
       setAdminName('');
       setAdminEmail('');
       setAdminPassword('');
-      setAdminBusinessName('');
+      setAdminDesignation('');
       setAdminPhone('');
     } catch (err: any) {
       console.error('Error creating admin:', err);
@@ -158,7 +159,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
     const trimmedName = adminName.trim();
     const trimmedEmail = adminEmail.trim().toLowerCase();
     const trimmedPassword = adminPassword.trim();
-    const trimmedBusiness = adminBusinessName.trim();
+    const trimmedDesignation = adminDesignation.trim();
     const trimmedPhone = adminPhone.trim();
 
     if (!trimmedName) {
@@ -181,9 +182,9 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
     let psCmd = `$env:ADMIN_NAME="${escPs(trimmedName)}"; $env:ADMIN_EMAIL="${escPs(trimmedEmail)}"; $env:ADMIN_PASSWORD="${escPs(trimmedPassword)}";`;
     let bashCmd = `ADMIN_NAME="${escBash(trimmedName)}" ADMIN_EMAIL="${escBash(trimmedEmail)}" ADMIN_PASSWORD="${escBash(trimmedPassword)}"`;
 
-    if (trimmedBusiness) {
-      psCmd += ` $env:ADMIN_BUSINESS_NAME="${escPs(trimmedBusiness)}";`;
-      bashCmd += ` ADMIN_BUSINESS_NAME="${escBash(trimmedBusiness)}"`;
+    if (trimmedDesignation) {
+      psCmd += ` $env:ADMIN_DESIGNATION="${escPs(trimmedDesignation)}"; $env:ADMIN_BUSINESS_NAME="${escPs(trimmedDesignation)}";`;
+      bashCmd += ` ADMIN_DESIGNATION="${escBash(trimmedDesignation)}" ADMIN_BUSINESS_NAME="${escBash(trimmedDesignation)}"`;
     }
     if (trimmedPhone) {
       psCmd += ` $env:ADMIN_PHONE="${escPs(trimmedPhone)}";`;
@@ -594,13 +595,13 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Business Name <span className="text-slate-400">(Optional)</span>
+                        Designation <span className="text-slate-400">(Optional)</span>
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Electrical Maintenance"
-                        value={adminBusinessName}
-                        onChange={(e) => setAdminBusinessName(e.target.value)}
+                        placeholder="e.g. GM (Elect) / Manager"
+                        value={adminDesignation}
+                        onChange={(e) => setAdminDesignation(e.target.value)}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                       />
                     </div>

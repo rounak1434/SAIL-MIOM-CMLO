@@ -281,10 +281,11 @@ async function main() {
     passwordInput = (await ask('Enter Admin Password (min 6 characters): ')).trim();
   }
 
-  // 4. Business Name (optional)
-  let businessNameInput = (
+  // 4. Designation (optional)
+  let designationInput = (
+    process.env.ADMIN_DESIGNATION ||
     process.env.ADMIN_BUSINESS_NAME ||
-    (await ask('Enter Business Name (optional, press Enter to skip): '))
+    (await ask('Enter Designation (optional, press Enter to skip): '))
   ).trim();
 
   // 5. Phone (optional)
@@ -366,8 +367,9 @@ async function main() {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      if (businessNameInput) {
-        updateData.businessName = businessNameInput;
+      if (designationInput) {
+        updateData.designation = designationInput;
+        updateData.businessName = designationInput;
       }
       if (phoneInput) {
         updateData.phone = phoneInput;
@@ -387,7 +389,8 @@ async function main() {
         name: nameInput,
         displayName: nameInput,
         role: 'admin',
-        businessName: businessNameInput || '',
+        designation: designationInput || '',
+        businessName: designationInput || '',
         phone: phoneInput || '',
         blocked: false,
         isActive: true,

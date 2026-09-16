@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   Building2,
+  Briefcase,
   Phone,
   Mail,
   Lock,
@@ -33,7 +34,7 @@ export const CreateAdminModal: React.FC<CreateAdminModalProps> = ({ isOpen, onCl
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [businessName, setBusinessName] = useState('');
+  const [designation, setDesignation] = useState('');
   const [phone, setPhone] = useState('');
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -50,7 +51,7 @@ export const CreateAdminModal: React.FC<CreateAdminModalProps> = ({ isOpen, onCl
     const cleanName = adminName.trim();
     const cleanEmail = adminEmail.trim().toLowerCase();
     const cleanPassword = adminPassword.trim();
-    const cleanBusiness = businessName.trim();
+    const cleanDesignation = designation.trim();
     const cleanPhone = phone.trim();
 
     if (!cleanName) {
@@ -103,7 +104,8 @@ export const CreateAdminModal: React.FC<CreateAdminModalProps> = ({ isOpen, onCl
         name: cleanName,
         displayName: cleanName,
         role: 'admin',
-        businessName: cleanBusiness || '',
+        designation: cleanDesignation || '',
+        businessName: cleanDesignation || '',
         phone: cleanPhone || '',
         blocked: false,
         isActive: true,
@@ -125,7 +127,7 @@ export const CreateAdminModal: React.FC<CreateAdminModalProps> = ({ isOpen, onCl
       setAdminName('');
       setAdminEmail('');
       setAdminPassword('');
-      setBusinessName('');
+      setDesignation('');
       setPhone('');
     } catch (err: any) {
       console.error('Failed to create admin:', err);
@@ -297,15 +299,15 @@ export const CreateAdminModal: React.FC<CreateAdminModalProps> = ({ isOpen, onCl
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Business Name <span className="text-slate-400">(Optional)</span>
+                    Designation <span className="text-slate-400">(Optional)</span>
                   </label>
                   <div className="relative">
-                    <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Briefcase className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="e.g. Electrical Maintenance"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="e.g. GM (Elect) / Manager"
+                      value={designation}
+                      onChange={(e) => setDesignation(e.target.value)}
                       disabled={isProcessing}
                       className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                     />

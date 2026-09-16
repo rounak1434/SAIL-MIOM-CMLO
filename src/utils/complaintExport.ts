@@ -10,6 +10,9 @@ export interface ParsedExportData {
   personalNo: string;
   phone: string;
   department: string;
+  locationType: string;
+  selectedLocation: string;
+  specifiedLocation: string;
   complaintLocation: string;
   siteLocation: string;
   natureOfComplaint: string;
@@ -49,8 +52,12 @@ const formatDate = (dateVal: any): string => {
 export const parseComplaintExportData = (complaint: Complaint): ParsedExportData => {
   const rawDesc = complaint.description || '';
   let cleanDesc = rawDesc;
-  let parsedPlant = '';
-  let parsedSite = '';
+  let parsedLocationType = '';
+  let parsedPlantLoc = '';
+  let parsedTownshipLoc = '';
+  let parsedSpecifiedLoc = '';
+  let parsedLegacyPlant = '';
+  let parsedLegacySite = '';
   let parsedPlantName = 'SAIL MIOM, CMLO';
   let parsedEmpType = complaint.designation || '';
 
@@ -60,11 +67,23 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     cleanDesc = parts[0].trim();
     const meta = parts[1] || '';
 
+    const locTypeMatch = meta.match(/Location Type:\s*([^|\n]+)/i);
+    if (locTypeMatch) parsedLocationType = locTypeMatch[1].trim();
+
+    const plantLocMatch = meta.match(/Plant Location:\s*([^|\n]+)/i);
+    if (plantLocMatch) parsedPlantLoc = plantLocMatch[1].trim();
+
+    const townshipLocMatch = meta.match(/Township Location:\s*([^|\n]+)/i);
+    if (townshipLocMatch) parsedTownshipLoc = townshipLocMatch[1].trim();
+
+    const specifiedMatch = meta.match(/Specified Location:\s*([^|\n]+)/i);
+    if (specifiedMatch) parsedSpecifiedLoc = specifiedMatch[1].trim();
+
     const plantMatch = meta.match(/Plant:\s*([^|\n]+)/i);
-    if (plantMatch) parsedPlant = plantMatch[1].trim();
+    if (plantMatch) parsedLegacyPlant = plantMatch[1].trim();
 
     const siteMatch = meta.match(/Site(?: Location)?:\s*([^|\n]+)/i);
-    if (siteMatch) parsedSite = siteMatch[1].trim();
+    if (siteMatch) parsedLegacySite = siteMatch[1].trim();
 
     const plantNameMatch = meta.match(/Plant Name:\s*([^|\n]+)/i);
     if (plantNameMatch) parsedPlantName = plantNameMatch[1].trim();
@@ -72,6 +91,27 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     const empMatch = meta.match(/Employment Type:\s*([^|\n]+)/i);
     if (empMatch) parsedEmpType = empMatch[1].trim();
   }
+
+  // Determine Location Type and values with full backward compatibility
+  const locationType =
+    complaint.locationType ||
+    parsedLocationType ||
+    (complaint.complaintLocation || parsedLegacyPlant ? 'Plant' : (complaint.siteLocation || parsedLegacySite ? 'Township' : ''));
+
+  const selectedLocation =
+    complaint.selectedLocation ||
+    (locationType === 'Plant'
+      ? (parsedPlantLoc || complaint.complaintLocation || parsedLegacyPlant)
+      : (parsedTownshipLoc || complaint.siteLocation || parsedLegacySite)) ||
+    complaint.complaintLocation ||
+    complaint.siteLocation ||
+    'N/A';
+
+  const specifiedLocation =
+    complaint.specifiedLocation ||
+    parsedSpecifiedLoc ||
+    complaint.plantLocationDetails ||
+    '';
 
   // Format notes
   const notesList: string[] = [];
@@ -107,8 +147,11 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     personalNo: complaint.employeeId || 'N/A',
     phone: complaint.phone || 'N/A',
     department: complaint.department || 'N/A',
-    complaintLocation: (complaint as any).complaintLocation || parsedPlant || 'N/A',
-    siteLocation: (complaint as any).siteLocation || parsedSite || 'N/A',
+    locationType: locationType || 'N/A',
+    selectedLocation: selectedLocation || 'N/A',
+    specifiedLocation: specifiedLocation,
+    complaintLocation: (complaint as any).complaintLocation || parsedLegacyPlant || selectedLocation || 'N/A',
+    siteLocation: (complaint as any).siteLocation || parsedLegacySite || selectedLocation || 'N/A',
     natureOfComplaint: nature,
     otherComplaintDetails: (complaint as any).otherComplaintDetails || otherDetails,
     description: cleanDesc || rawDesc || 'N/A',
@@ -128,7 +171,7 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
 export const downloadComplaintExcel = (complaint: Complaint) => {
   const data = parseComplaintExportData(complaint);
 
-  const row = {
+  const row: Record<string, any> = {
     'Complaint ID': data.ticketId,
     'Plant Name': data.plantName,
     'Name of Complaining Person': data.name,
@@ -136,19 +179,24 @@ export const downloadComplaintExcel = (complaint: Complaint) => {
     'Personal No.': data.personalNo,
     'Mobile No.': data.phone,
     'Department': data.department,
-    'Complaint Location': data.complaintLocation,
-    'Site Location': data.siteLocation,
-    'Nature of Complaint': data.natureOfComplaint,
-    'Other Complaint Details': data.otherComplaintDetails,
-    'Complaint Description': data.description,
-    'Status': data.status,
-    'Priority': data.priority,
-    'Assigned Moderator': data.assignedModerator,
-    'Created Date': data.createdDate,
-    'Last Updated Date': data.updatedDate,
-    'Resolution / Notes': data.resolutionNotes,
-    'Photograph URL': data.imageUrl || 'None',
+    'Location Type': data.locationType,
+    'Selected Location': data.selectedLocation,
   };
+
+  if (data.locationType === 'Plant' || data.specifiedLocation) {
+    row['Specified Location'] = data.specifiedLocation || 'N/A';
+  }
+
+  row['Nature of Complaint'] = data.natureOfComplaint;
+  row['Other Complaint Details'] = data.otherComplaintDetails;
+  row['Complaint Description'] = data.description;
+  row['Status'] = data.status;
+  row['Priority'] = data.priority;
+  row['Assigned Moderator'] = data.assignedModerator;
+  row['Created Date'] = data.createdDate;
+  row['Last Updated Date'] = data.updatedDate;
+  row['Resolution / Notes'] = data.resolutionNotes;
+  row['Photograph URL'] = data.imageUrl || 'None';
 
   const worksheet = XLSX.utils.json_to_sheet([row]);
 
@@ -315,8 +363,27 @@ export const downloadComplaintPDF = async (complaint: Complaint) => {
   // Section: Complaint Information
   drawSectionTitle('2. Complaint & Location Details');
   drawFieldRow('Plant Name:', data.plantName);
-  drawFieldRow('Complaint Location:', data.complaintLocation);
-  drawFieldRow('Site Location:', data.siteLocation);
+  if (data.locationType && data.locationType !== 'N/A') {
+    drawFieldRow('Location Type:', data.locationType);
+    if (data.locationType === 'Plant') {
+      drawFieldRow('Plant Location:', data.selectedLocation);
+      if (data.specifiedLocation) {
+        drawFieldRow('Specified Location:', data.specifiedLocation);
+      }
+    } else if (data.locationType === 'Township') {
+      drawFieldRow('Township Location:', data.selectedLocation);
+    } else {
+      drawFieldRow('Selected Location:', data.selectedLocation);
+    }
+  } else {
+    // Legacy fallback
+    if (data.complaintLocation && data.complaintLocation !== 'N/A') {
+      drawFieldRow('Complaint Location:', data.complaintLocation);
+    }
+    if (data.siteLocation && data.siteLocation !== 'N/A') {
+      drawFieldRow('Site Location:', data.siteLocation);
+    }
+  }
   drawFieldRow('Nature of Complaint:', data.natureOfComplaint);
   if (data.otherComplaintDetails && data.otherComplaintDetails !== 'N/A') {
     drawFieldRow('Other Complaint Details:', data.otherComplaintDetails);

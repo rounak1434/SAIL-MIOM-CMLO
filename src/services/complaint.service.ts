@@ -67,6 +67,12 @@ export interface Complaint {
   lastCommentAt?: any;
   createdAt: any;
   updatedAt?: any;
+  locationType?: 'Plant' | 'Township' | string;
+  selectedLocation?: string;
+  specifiedLocation?: string;
+  complaintLocation?: string;
+  siteLocation?: string;
+  plantLocationDetails?: string;
 }
 
 export interface ComplaintStats {
@@ -275,6 +281,9 @@ export const createComplaint = async (
       assignedTo: null,
       assignedToUID: null,
       assignedToName: null,
+      ...(complaintData.locationType ? { locationType: complaintData.locationType } : {}),
+      ...(complaintData.selectedLocation ? { selectedLocation: complaintData.selectedLocation } : {}),
+      ...(complaintData.specifiedLocation ? { specifiedLocation: complaintData.specifiedLocation } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

@@ -43,6 +43,8 @@ const DEPARTMENTS = [
   'KVS Teacher',
 ] as const;
 
+const LOCATION_TYPES = ['Plant', 'Township'] as const;
+
 const PLANT_LOCATIONS = [
   'Crushing',
   'Screening',
@@ -50,15 +52,13 @@ const PLANT_LOCATIONS = [
   'Mining',
   'Services',
   'Mining Shelter',
+  'General Office',
+  'Mechanical Services',
+  'Geological Office',
 ] as const;
 
-const SITE_LOCATIONS = [
+const TOWNSHIP_LOCATIONS = [
   'CISF Office',
-  'General Office',
-  'Apex Office',
-  'Mechanical Services',
-  'Civil Office',
-  'Geological Office',
   'Bank of India',
   'New B-Type Quarter',
   'C-Type Quarter',
@@ -68,6 +68,8 @@ const SITE_LOCATIONS = [
   'Community Center',
   'Megha Club',
   'A Type Quarter',
+  'Apex Office',
+  'Civil Office',
 ] as const;
 
 const NATURE_OF_COMPLAINT_OPTIONS = [
@@ -92,9 +94,9 @@ interface ComplaintFormData {
   personalNo: string;
   phone: string;
   department: string;
-  complaintLocation: string;
-  plantLocationDetails: string;
-  siteLocation: string;
+  locationType: '' | 'Plant' | 'Township';
+  selectedLocation: string;
+  specifiedLocation: string;
   natureOfComplaint: string;
   otherComplaintDetails: string;
   description: string;
@@ -107,9 +109,9 @@ const initialFormData: ComplaintFormData = {
   personalNo: '',
   phone: '',
   department: '',
-  complaintLocation: '',
-  plantLocationDetails: '',
-  siteLocation: '',
+  locationType: '',
+  selectedLocation: '',
+  specifiedLocation: '',
   natureOfComplaint: '',
   otherComplaintDetails: '',
   description: '',
@@ -162,6 +164,28 @@ const FileComplaint = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleLocationTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newType = e.target.value as '' | 'Plant' | 'Township';
+    setFormData((prev) => ({
+      ...prev,
+      locationType: newType,
+      selectedLocation: '',
+      specifiedLocation: '',
+    }));
+  };
+
+  const handleSpecifyLocationChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const words = val.trim().split(/\s+/).filter(Boolean);
+    if (words.length > 25) {
+      // Prevent typing additional words beyond 25
+      const allowed = words.slice(0, 25).join(' ');
+      setFormData((prev) => ({ ...prev, specifiedLocation: allowed }));
+      return;
+    }
+    setFormData((prev) => ({ ...prev, specifiedLocation: val }));
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,14 +256,30 @@ const FileComplaint = () => {
       return;
     }
 
-    if (!formData.complaintLocation) {
-      setError('Please select Complaint Location (Plant)');
+    if (!formData.locationType) {
+      setError('Please select a location type.');
       return;
     }
 
-    if (!formData.siteLocation) {
-      setError('Please select Site Location');
-      return;
+    if (formData.locationType === 'Plant') {
+      if (!formData.selectedLocation) {
+        setError('Please select a plant location.');
+        return;
+      }
+      if (!formData.specifiedLocation.trim()) {
+        setError('Please specify the exact location.');
+        return;
+      }
+      const specifiedWords = getWordCount(formData.specifiedLocation);
+      if (specifiedWords > 25) {
+        setError('Location description must be 25 words or fewer.');
+        return;
+      }
+    } else if (formData.locationType === 'Township') {
+      if (!formData.selectedLocation) {
+        setError('Please select a township location.');
+        return;
+      }
     }
 
     if (!formData.natureOfComplaint) {
@@ -296,10 +336,13 @@ const FileComplaint = () => {
           : formData.natureOfComplaint;
 
       const locationDetailsList = [
-        `Plant: ${formData.complaintLocation}${
-          formData.plantLocationDetails.trim() ? ` (${formData.plantLocationDetails.trim()})` : ''
-        }`,
-        `Site Location: ${formData.siteLocation}`,
+        `Location Type: ${formData.locationType}`,
+        formData.locationType === 'Plant'
+          ? `Plant Location: ${formData.selectedLocation}`
+          : `Township Location: ${formData.selectedLocation}`,
+        ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
+          ? [`Specified Location: ${formData.specifiedLocation.trim()}`]
+          : []),
         `Plant Name: ${formData.plantName}`,
         `Employment Type: ${formData.employmentType}`,
       ];
@@ -322,6 +365,14 @@ const FileComplaint = () => {
         priority: 'medium' as const,
         uid: currentUser?.uid || 'anonymous',
         userEmail: currentUser?.email || emailToUse,
+        locationType: formData.locationType,
+        selectedLocation: formData.selectedLocation,
+        ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
+          ? { specifiedLocation: formData.specifiedLocation.trim() }
+          : {}),
+        complaintLocation: formData.locationType === 'Plant' ? formData.selectedLocation : '',
+        siteLocation: formData.locationType === 'Township' ? formData.selectedLocation : '',
+        plantLocationDetails: formData.locationType === 'Plant' ? formData.specifiedLocation.trim() : '',
         ...(imageUrl ? { imageUrl } : {}),
       };
 
@@ -354,6 +405,7 @@ const FileComplaint = () => {
 
   const descriptionWordCount = getWordCount(formData.description);
   const isWordLimitExceeded = descriptionWordCount > 200;
+  const specifiedLocationWordCount = getWordCount(formData.specifiedLocation);
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
@@ -454,16 +506,21 @@ const FileComplaint = () => {
                     <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.department}</p>
                   </div>
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
-                    <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Complaint Location (Plant)</p>
-                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">
-                      {submittedData.complaintLocation}
-                      {submittedData.plantLocationDetails ? ` (${submittedData.plantLocationDetails})` : ''}
-                    </p>
+                    <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Location Type</p>
+                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.locationType}</p>
                   </div>
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
-                    <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Site Location</p>
-                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.siteLocation}</p>
+                    <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">
+                      {submittedData.locationType === 'Plant' ? 'Plant Location' : 'Township Location'}
+                    </p>
+                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.selectedLocation}</p>
                   </div>
+                  {submittedData.locationType === 'Plant' && submittedData.specifiedLocation && (
+                    <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
+                      <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Specified Location</p>
+                      <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.specifiedLocation}</p>
+                    </div>
+                  )}
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
                     <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Nature of Complaint</p>
                     <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">
@@ -653,77 +710,128 @@ const FileComplaint = () => {
                 </select>
               </div>
 
-              {/* 7. Complaint Location */}
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-[#2563EB]" />
-                  <span>
-                    Complaint Location <span className="text-red-500">*</span>
-                  </span>
-                </label>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-1">
-                      Plant <span className="text-red-500">*</span>
+              {/* 7. Location Section */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#2563EB]" />
+                    <span>
+                      Select Location <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <select
+                    name="locationType"
+                    value={formData.locationType}
+                    onChange={handleLocationTypeChange}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                    required
+                  >
+                    <option value="" disabled>
+                      Select Location
+                    </option>
+                    {LOCATION_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Conditional Plant Fields */}
+                {formData.locationType === 'Plant' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#9CA3AF]" />
+                        <span>
+                          Plant Location <span className="text-red-500">*</span>
+                        </span>
+                      </label>
+                      <select
+                        name="selectedLocation"
+                        value={formData.selectedLocation}
+                        onChange={handleChange}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                        required
+                      >
+                        <option value="" disabled>
+                          -- Select Plant Location --
+                        </option>
+                        {PLANT_LOCATIONS.map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-sm font-medium text-[#374151] dark:text-[#D1D5DB] flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-[#9CA3AF]" />
+                          <span>
+                            Specify Location <span className="text-red-500">*</span>
+                          </span>
+                        </label>
+                        <span
+                          className={`text-xs ${
+                            specifiedLocationWordCount > 25
+                              ? 'text-red-500 font-semibold'
+                              : 'text-[#6B7280] dark:text-[#9CA3AF]'
+                          }`}
+                        >
+                          {specifiedLocationWordCount} / 25 words
+                        </span>
+                      </div>
+                      <textarea
+                        name="specifiedLocation"
+                        value={formData.specifiedLocation}
+                        onChange={handleSpecifyLocationChange}
+                        rows={3}
+                        placeholder="Specify the exact location of the complaint (maximum 25 words)"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all resize-none"
+                        required
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Conditional Township Fields */}
+                {formData.locationType === 'Township' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-[#9CA3AF]" />
+                      <span>
+                        Township Location <span className="text-red-500">*</span>
+                      </span>
                     </label>
                     <select
-                      name="complaintLocation"
-                      value={formData.complaintLocation}
+                      name="selectedLocation"
+                      value={formData.selectedLocation}
                       onChange={handleChange}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
                       required
                     >
                       <option value="" disabled>
-                        -- Select Plant Location --
+                        -- Select Township Location --
                       </option>
-                      {PLANT_LOCATIONS.map((loc) => (
+                      {TOWNSHIP_LOCATIONS.map((loc) => (
                         <option key={loc} value={loc}>
                           {loc}
                         </option>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-1">
-                      Specific Location / Details (in words)
-                    </label>
-                    <input
-                      type="text"
-                      name="plantLocationDetails"
-                      value={formData.plantLocationDetails}
-                      onChange={handleChange}
-                      maxLength={50}
-                      placeholder="e.g. Crusher floor 2, conveyor 3"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 8. Site Location */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#9CA3AF]" />
-                  <span>
-                    Site Location <span className="text-red-500">*</span>
-                  </span>
-                </label>
-                <select
-                  name="siteLocation"
-                  value={formData.siteLocation}
-                  onChange={handleChange}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
-                  required
-                >
-                  <option value="" disabled>
-                    -- Select Site Location --
-                  </option>
-                  {SITE_LOCATIONS.map((site) => (
-                    <option key={site} value={site}>
-                      {site}
-                    </option>
-                  ))}
-                </select>
+                  </motion.div>
+                )}
               </div>
 
               {/* 9. Nature of Complaint */}

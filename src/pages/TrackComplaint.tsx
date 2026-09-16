@@ -375,6 +375,40 @@ const TrackComplaintContent = () => {
                   </p>
                 </div>
 
+                {/* Location Information */}
+                {(complaint.locationType || complaint.complaintLocation || complaint.siteLocation) && (
+                  <>
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B]">
+                      <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
+                        Location Type
+                      </h4>
+                      <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                        {complaint.locationType || (complaint.complaintLocation ? 'Plant' : 'Township')}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B]">
+                      <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
+                        {(complaint.locationType === 'Plant' || complaint.complaintLocation) ? 'Plant Location' : 'Township Location'}
+                      </h4>
+                      <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                        {complaint.selectedLocation || complaint.complaintLocation || complaint.siteLocation || 'N/A'}
+                      </p>
+                    </div>
+
+                    {(complaint.locationType === 'Plant' || (!complaint.locationType && complaint.complaintLocation)) && (complaint.specifiedLocation || complaint.plantLocationDetails) && (
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] md:col-span-2">
+                        <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
+                          Specified Location
+                        </h4>
+                        <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                          {complaint.specifiedLocation || complaint.plantLocationDetails}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B]">
                   <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
                     Priority Level

@@ -1169,6 +1169,34 @@ const Dashboard = () => {
                           <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Designation</h4>
                           <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">{selectedComplaint.designation}</p>
                         </div>
+
+                        {/* Location Details */}
+                        {(selectedComplaint.locationType || selectedComplaint.complaintLocation || selectedComplaint.siteLocation) && (
+                          <>
+                            <div className="p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
+                              <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Location Type</h4>
+                              <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                                {selectedComplaint.locationType || (selectedComplaint.complaintLocation ? 'Plant' : 'Township')}
+                              </p>
+                            </div>
+                            <div className="p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
+                              <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">
+                                {(selectedComplaint.locationType === 'Plant' || selectedComplaint.complaintLocation) ? 'Plant Location' : 'Township Location'}
+                              </h4>
+                              <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                                {selectedComplaint.selectedLocation || selectedComplaint.complaintLocation || selectedComplaint.siteLocation || 'N/A'}
+                              </p>
+                            </div>
+                            {(selectedComplaint.locationType === 'Plant' || (!selectedComplaint.locationType && selectedComplaint.complaintLocation)) && (selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails) && (
+                              <div className="p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl md:col-span-2">
+                                <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Specified Location</h4>
+                                <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                                  {selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
 
                       <div className="p-3.5 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">

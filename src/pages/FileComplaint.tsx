@@ -41,6 +41,7 @@ const DEPARTMENTS = [
   'CC',
   'CISF',
   'KVS Teacher',
+  'Others',
 ] as const;
 
 const LOCATION_TYPES = ['Plant', 'Township'] as const;
@@ -94,6 +95,7 @@ interface ComplaintFormData {
   personalNo: string;
   phone: string;
   department: string;
+  specifiedDepartment: string;
   locationType: '' | 'Plant' | 'Township';
   selectedLocation: string;
   specifiedLocation: string;
@@ -109,6 +111,7 @@ const initialFormData: ComplaintFormData = {
   personalNo: '',
   phone: '',
   department: '',
+  specifiedDepartment: '',
   locationType: '',
   selectedLocation: '',
   specifiedLocation: '',
@@ -163,6 +166,15 @@ const FileComplaint = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      department: val,
+      specifiedDepartment: '',
     }));
   };
 
@@ -253,6 +265,11 @@ const FileComplaint = () => {
 
     if (!formData.department) {
       setError('Please select Department');
+      return;
+    }
+
+    if (formData.department === 'Others' && !formData.specifiedDepartment.trim()) {
+      setError('Please specify your department.');
       return;
     }
 
@@ -351,13 +368,18 @@ const FileComplaint = () => {
         ' | '
       )}`;
 
+      const finalDepartment =
+        formData.department === 'Others'
+          ? formData.specifiedDepartment.trim()
+          : formData.department.trim();
+
       // Map to existing complaint model for complete compatibility
       const complaintData = {
         name: formData.name.trim(),
         email: emailToUse,
         phone: normalizedPhone,
         employeeId: formData.personalNo.trim(),
-        department: formData.department.trim(),
+        department: finalDepartment,
         designation: formData.employmentType.trim(),
         category: fullNature,
         title: fullNature,
@@ -380,7 +402,7 @@ const FileComplaint = () => {
 
       if (result.ticketId) {
         setTicketId(result.ticketId);
-        setSubmittedData({ ...formData });
+        setSubmittedData({ ...formData, department: finalDepartment });
         setSubmitted(true);
         setError('');
 
@@ -685,29 +707,56 @@ const FileComplaint = () => {
               </div>
 
               {/* 6. Department */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-[#9CA3AF]" />
-                  <span>
-                    Department <span className="text-red-500">*</span>
-                  </span>
-                </label>
-                <select
-                  name="department"
-                  value={formData.department}
-                  onChange={handleChange}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
-                  required
-                >
-                  <option value="" disabled>
-                    -- Select Department --
-                  </option>
-                  {DEPARTMENTS.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-[#9CA3AF]" />
+                    <span>
+                      Department <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <select
+                    name="department"
+                    value={formData.department}
+                    onChange={handleDepartmentChange}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                    required
+                  >
+                    <option value="" disabled>
+                      -- Select Department --
                     </option>
-                  ))}
-                </select>
+                    {DEPARTMENTS.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Conditional Specify Department Field when "Others" is selected */}
+                {formData.department === 'Others' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-[#9CA3AF]" />
+                      <span>
+                        Specify Department <span className="text-red-500">*</span>
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      name="specifiedDepartment"
+                      value={formData.specifiedDepartment}
+                      onChange={handleChange}
+                      placeholder="Enter your department name"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                      required
+                    />
+                  </motion.div>
+                )}
               </div>
 
               {/* 7. Location Section */}

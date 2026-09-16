@@ -15,7 +15,6 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   updatePassword,
-  User as FirebaseUser,
 } from 'firebase/auth';
 import {
   doc,

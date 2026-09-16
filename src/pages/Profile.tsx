@@ -23,6 +23,12 @@ const Profile = () => {
   const { currentUser, userRole, userName, userData } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Safely determine if the authenticated user has an email/password provider
+  const isPasswordProvider =
+    auth.currentUser?.providerData?.some(
+      (provider) => provider?.providerId === 'password'
+    ) ?? false;
+  
   // Photo states
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoSuccessMsg, setPhotoSuccessMsg] = useState('');

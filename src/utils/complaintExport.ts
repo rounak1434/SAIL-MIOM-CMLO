@@ -107,8 +107,10 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
   const selectedLocation =
     complaint.selectedLocation ||
     (locationType === 'Plant'
-      ? (parsedPlantLoc || complaint.complaintLocation || parsedLegacyPlant)
-      : (parsedTownshipLoc || complaint.siteLocation || parsedLegacySite)) ||
+      ? (complaint.plantLocation || parsedPlantLoc || complaint.complaintLocation || parsedLegacyPlant)
+      : (complaint.townshipLocation || parsedTownshipLoc || complaint.siteLocation || parsedLegacySite)) ||
+    complaint.plantLocation ||
+    complaint.townshipLocation ||
     complaint.complaintLocation ||
     complaint.siteLocation ||
     'N/A';
@@ -156,7 +158,7 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     plantName: (complaint as any).plantName || parsedPlantName || 'SAIL MIOM, CMLO',
     name: complaint.name || 'N/A',
     employmentType: (complaint as any).employmentType || parsedEmpType || complaint.designation || 'N/A',
-    personalNo: complaint.employeeId || 'N/A',
+    personalNo: (complaint as any).personalNo || complaint.employeeId || '',
     phone: complaint.phone || 'N/A',
     department: complaint.department || 'N/A',
     locationType: locationType || 'N/A',
@@ -194,11 +196,15 @@ export const downloadComplaintExcel = (complaint: Complaint) => {
     'Mobile No.': data.phone,
     'Department': data.department,
     'Location Type': data.locationType,
-    'Selected Location': data.selectedLocation,
+    ...(data.locationType === 'Plant'
+      ? { 'Plant Location': data.selectedLocation }
+      : data.locationType === 'Township'
+      ? { 'Township Location': data.selectedLocation }
+      : { 'Selected Location': data.selectedLocation }),
   };
 
-  if (data.locationType === 'Plant' || data.specifiedLocation) {
-    row['Specified Location'] = data.specifiedLocation || 'N/A';
+  if (data.specifiedLocation) {
+    row['Specified Location'] = data.specifiedLocation;
   }
 
   if ((data.locationType === 'Township' || !data.locationType) && data.qtrNo) {
@@ -373,7 +379,7 @@ export const downloadComplaintPDF = async (complaint: Complaint) => {
   drawSectionTitle('1. Complainant Information');
   drawFieldRow('Name:', data.name);
   drawFieldRow('Employment Type:', data.employmentType);
-  drawFieldRow('Personal No.:', data.personalNo);
+  drawFieldRow('Personal No.:', data.personalNo || '—');
   drawFieldRow('Mobile No.:', data.phone);
   drawFieldRow('Department:', data.department);
   y += 2;
@@ -390,11 +396,17 @@ export const downloadComplaintPDF = async (complaint: Complaint) => {
       }
     } else if (data.locationType === 'Township') {
       drawFieldRow('Township Location:', data.selectedLocation);
+      if (data.specifiedLocation) {
+        drawFieldRow('Specified Location:', data.specifiedLocation);
+      }
       if (data.qtrNo) {
         drawFieldRow('Qtr No.:', data.qtrNo);
       }
     } else {
       drawFieldRow('Selected Location:', data.selectedLocation);
+      if (data.specifiedLocation) {
+        drawFieldRow('Specified Location:', data.specifiedLocation);
+      }
       if (data.qtrNo) {
         drawFieldRow('Qtr No.:', data.qtrNo);
       }

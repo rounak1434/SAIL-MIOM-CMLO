@@ -57,6 +57,7 @@ const PLANT_LOCATIONS = [
   'General Office',
   'Mechanical Services',
   'Geological Office',
+  'Others',
 ] as const;
 
 const TOWNSHIP_LOCATIONS = [
@@ -72,6 +73,7 @@ const TOWNSHIP_LOCATIONS = [
   'A Type Quarter',
   'Apex Office',
   'Civil Office',
+  'Others',
 ] as const;
 
 const NATURE_OF_COMPLAINT_OPTIONS = [
@@ -192,6 +194,24 @@ const FileComplaint = () => {
     }));
   };
 
+  const handlePlantLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      selectedLocation: val,
+      specifiedLocation: '',
+    }));
+  };
+
+  const handleTownshipLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      selectedLocation: val,
+      specifiedLocation: '',
+    }));
+  };
+
   const handleSpecifyLocationChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     const words = val.trim().split(/\s+/).filter(Boolean);
@@ -250,7 +270,7 @@ const FileComplaint = () => {
       return;
     }
 
-    if (!formData.personalNo.trim()) {
+    if (formData.employmentType === 'Employ' && !formData.personalNo.trim()) {
       setError('Please enter Personal No.');
       return;
     }
@@ -288,7 +308,11 @@ const FileComplaint = () => {
         return;
       }
       if (!formData.specifiedLocation.trim()) {
-        setError('Please specify the exact location.');
+        setError(
+          formData.selectedLocation === 'Others'
+            ? 'Please specify the exact plant location.'
+            : 'Please specify the exact location.'
+        );
         return;
       }
       const specifiedWords = getWordCount(formData.specifiedLocation);
@@ -300,6 +324,17 @@ const FileComplaint = () => {
       if (!formData.selectedLocation) {
         setError('Please select a township location.');
         return;
+      }
+      if (formData.selectedLocation === 'Others') {
+        if (!formData.specifiedLocation.trim()) {
+          setError('Please specify the exact township location.');
+          return;
+        }
+        const specifiedWords = getWordCount(formData.specifiedLocation);
+        if (specifiedWords > 25) {
+          setError('Location description must be 25 words or fewer.');
+          return;
+        }
       }
       if (!formData.qtrNo.trim()) {
         setError('Please enter Qtr No.');
@@ -360,16 +395,19 @@ const FileComplaint = () => {
           ? `Other: ${formData.otherComplaintDetails.trim()}`
           : formData.natureOfComplaint;
 
+      const isTownshipOthers = formData.locationType === 'Township' && formData.selectedLocation === 'Others';
+      const hasSpecifiedLocation = (formData.locationType === 'Plant' || isTownshipOthers) && Boolean(formData.specifiedLocation.trim());
+
       const locationDetailsList = [
         `Location Type: ${formData.locationType}`,
         formData.locationType === 'Plant'
           ? `Plant Location: ${formData.selectedLocation}`
           : `Township Location: ${formData.selectedLocation}`,
+        ...(hasSpecifiedLocation
+          ? [`Specified Location: ${formData.specifiedLocation.trim()}`]
+          : []),
         ...(formData.locationType === 'Township' && formData.qtrNo.trim()
           ? [`Qtr No.: ${formData.qtrNo.trim()}`]
-          : []),
-        ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
-          ? [`Specified Location: ${formData.specifiedLocation.trim()}`]
           : []),
         `Plant Name: ${formData.plantName}`,
         `Employment Type: ${formData.employmentType}`,
@@ -390,6 +428,7 @@ const FileComplaint = () => {
         email: emailToUse,
         phone: normalizedPhone,
         employeeId: formData.personalNo.trim(),
+        personalNo: formData.personalNo.trim(),
         department: finalDepartment,
         designation: formData.employmentType.trim(),
         employmentType: formData.employmentType.trim(),
@@ -401,18 +440,30 @@ const FileComplaint = () => {
         userEmail: currentUser?.email || emailToUse,
         locationType: formData.locationType,
         selectedLocation: formData.selectedLocation,
+        ...(formData.locationType === 'Plant'
+          ? {
+              plantLocation: formData.selectedLocation,
+              complaintLocation: formData.selectedLocation,
+              ...(hasSpecifiedLocation
+                ? {
+                    specifiedLocation: formData.specifiedLocation.trim(),
+                    plantLocationDetails: formData.specifiedLocation.trim(),
+                  }
+                : {}),
+            }
+          : {}),
         ...(formData.locationType === 'Township'
           ? {
               townshipLocation: formData.selectedLocation,
+              siteLocation: formData.selectedLocation,
               qtrNo: formData.qtrNo.trim(),
+              ...(hasSpecifiedLocation
+                ? {
+                    specifiedLocation: formData.specifiedLocation.trim(),
+                  }
+                : {}),
             }
           : {}),
-        ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
-          ? { specifiedLocation: formData.specifiedLocation.trim() }
-          : {}),
-        complaintLocation: formData.locationType === 'Plant' ? formData.selectedLocation : '',
-        siteLocation: formData.locationType === 'Township' ? formData.selectedLocation : '',
-        plantLocationDetails: formData.locationType === 'Plant' ? formData.specifiedLocation.trim() : '',
         ...(imageUrl ? { imageUrl } : {}),
       };
 
@@ -535,7 +586,7 @@ const FileComplaint = () => {
                   </div>
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
                     <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Personal No.</p>
-                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.personalNo}</p>
+                    <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.personalNo || '—'}</p>
                   </div>
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
                     <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Mobile No.</p>
@@ -555,16 +606,16 @@ const FileComplaint = () => {
                     </p>
                     <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.selectedLocation}</p>
                   </div>
+                  {((submittedData.locationType === 'Plant') || (submittedData.locationType === 'Township' && submittedData.selectedLocation === 'Others')) && submittedData.specifiedLocation && (
+                    <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
+                      <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Specified Location</p>
+                      <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.specifiedLocation}</p>
+                    </div>
+                  )}
                   {submittedData.locationType === 'Township' && submittedData.qtrNo && (
                     <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
                       <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Qtr No.</p>
                       <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.qtrNo}</p>
-                    </div>
-                  )}
-                  {submittedData.locationType === 'Plant' && submittedData.specifiedLocation && (
-                    <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
-                      <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Specified Location</p>
-                      <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.specifiedLocation}</p>
                     </div>
                   )}
                   <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
@@ -695,7 +746,7 @@ const FileComplaint = () => {
               {/* 4. Personal No. */}
               <div>
                 <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1">
-                  Personal No. <span className="text-red-500">*</span>
+                  Personal No. {formData.employmentType !== 'Others' && <span className="text-red-500">*</span>}
                 </label>
                 <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-1.5">
                   Present place of posting
@@ -707,7 +758,7 @@ const FileComplaint = () => {
                   onChange={handleChange}
                   placeholder="Enter personal number / place of posting"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
-                  required
+                  required={formData.employmentType !== 'Others'}
                 />
               </div>
 
@@ -828,7 +879,7 @@ const FileComplaint = () => {
                       <select
                         name="selectedLocation"
                         value={formData.selectedLocation}
-                        onChange={handleChange}
+                        onChange={handlePlantLocationChange}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
                         required
                       >
@@ -866,7 +917,11 @@ const FileComplaint = () => {
                         value={formData.specifiedLocation}
                         onChange={handleSpecifyLocationChange}
                         rows={3}
-                        placeholder="Specify the exact location of the complaint (maximum 25 words)"
+                        placeholder={
+                          formData.selectedLocation === 'Others'
+                            ? 'Specify the exact plant location'
+                            : 'Specify the exact location of the complaint (maximum 25 words)'
+                        }
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all resize-none"
                         required
                       />
@@ -892,7 +947,7 @@ const FileComplaint = () => {
                       <select
                         name="selectedLocation"
                         value={formData.selectedLocation}
-                        onChange={handleChange}
+                        onChange={handleTownshipLocationChange}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
                         required
                       >
@@ -906,6 +961,42 @@ const FileComplaint = () => {
                         ))}
                       </select>
                     </div>
+
+                    {/* Conditional Specify Location for Township = Others */}
+                    {formData.selectedLocation === 'Others' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-sm font-medium text-[#374151] dark:text-[#D1D5DB] flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-[#9CA3AF]" />
+                            <span>
+                              Specify Location <span className="text-red-500">*</span>
+                            </span>
+                          </label>
+                          <span
+                            className={`text-xs ${
+                              specifiedLocationWordCount > 25
+                                ? 'text-red-500 font-semibold'
+                                : 'text-[#6B7280] dark:text-[#9CA3AF]'
+                            }`}
+                          >
+                            {specifiedLocationWordCount} / 25 words
+                          </span>
+                        </div>
+                        <textarea
+                          name="specifiedLocation"
+                          value={formData.specifiedLocation}
+                          onChange={handleSpecifyLocationChange}
+                          rows={3}
+                          placeholder="Specify the exact township location"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all resize-none"
+                          required
+                        />
+                      </motion.div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">

@@ -59,6 +59,12 @@ const getQtrNoFromDesc = (desc?: string): string => {
   return match ? match[1].trim() : '';
 };
 
+const getSpecifiedLocFromDesc = (desc?: string): string => {
+  if (!desc) return '';
+  const match = desc.match(/Specified Location:\s*([^|\n]+)/i);
+  return match ? match[1].trim() : '';
+};
+
 const TrackComplaintContent = () => {
   const location = useLocation();
   const [complaintId, setComplaintId] = useState('');
@@ -402,13 +408,13 @@ const TrackComplaintContent = () => {
                       </p>
                     </div>
 
-                    {(complaint.locationType === 'Plant' || (!complaint.locationType && complaint.complaintLocation)) && (complaint.specifiedLocation || complaint.plantLocationDetails) && (
+                    {(complaint.specifiedLocation || complaint.plantLocationDetails || getSpecifiedLocFromDesc(complaint.description)) && (
                       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] md:col-span-2">
                         <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
                           Specified Location
                         </h4>
                         <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
-                          {complaint.specifiedLocation || complaint.plantLocationDetails}
+                          {complaint.specifiedLocation || complaint.plantLocationDetails || getSpecifiedLocFromDesc(complaint.description)}
                         </p>
                       </div>
                     )}

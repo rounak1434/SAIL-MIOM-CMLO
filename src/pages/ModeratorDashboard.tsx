@@ -18,6 +18,13 @@ const getQtrNoFromDesc = (desc?: string): string => {
   return match ? match[1].trim() : '';
 };
 
+const getSpecifiedLocFromDesc = (desc?: string): string => {
+  if (!desc) return '';
+  const match = desc.match(/Specified Location:\s*([^|\n]+)/i);
+  return match ? match[1].trim() : '';
+};
+
+
 const ModeratorDashboard = () => {
   const { currentUser } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -361,11 +368,11 @@ const ModeratorDashboard = () => {
                             {selectedComplaint.townshipLocation || selectedComplaint.selectedLocation || selectedComplaint.complaintLocation || selectedComplaint.siteLocation || 'N/A'}
                           </p>
                         </div>
-                        {(selectedComplaint.locationType === 'Plant' || (!selectedComplaint.locationType && selectedComplaint.complaintLocation)) && (selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails) && (
+                        {(selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails || getSpecifiedLocFromDesc(selectedComplaint.description)) && (
                           <div className="p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl md:col-span-2">
                             <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Specified Location</h4>
                             <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
-                              {selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails}
+                              {selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails || getSpecifiedLocFromDesc(selectedComplaint.description)}
                             </p>
                           </div>
                         )}

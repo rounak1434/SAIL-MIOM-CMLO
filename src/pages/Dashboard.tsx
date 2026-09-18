@@ -33,6 +33,12 @@ import SuperAdminLicenseModal from '../components/SuperAdminLicenseModal';
 import CreateAdminModal from '../components/CreateAdminModal';
 import { useRateLimit } from '../hooks/useRateLimit';
 
+const getQtrNoFromDesc = (desc?: string): string => {
+  if (!desc) return '';
+  const match = desc.match(/Qtr No\.:\s*([^|\n]+)/i);
+  return match ? match[1].trim() : '';
+};
+
 const Dashboard = () => {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [stats, setStats] = useState<ComplaintStats>({
@@ -1184,7 +1190,7 @@ const Dashboard = () => {
                                 {(selectedComplaint.locationType === 'Plant' || selectedComplaint.complaintLocation) ? 'Plant Location' : 'Township Location'}
                               </h4>
                               <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
-                                {selectedComplaint.selectedLocation || selectedComplaint.complaintLocation || selectedComplaint.siteLocation || 'N/A'}
+                                {selectedComplaint.townshipLocation || selectedComplaint.selectedLocation || selectedComplaint.complaintLocation || selectedComplaint.siteLocation || 'N/A'}
                               </p>
                             </div>
                             {(selectedComplaint.locationType === 'Plant' || (!selectedComplaint.locationType && selectedComplaint.complaintLocation)) && (selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails) && (
@@ -1192,6 +1198,14 @@ const Dashboard = () => {
                                 <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Specified Location</h4>
                                 <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
                                   {selectedComplaint.specifiedLocation || selectedComplaint.plantLocationDetails}
+                                </p>
+                              </div>
+                            )}
+                            {(selectedComplaint.locationType === 'Township' || (!selectedComplaint.locationType && selectedComplaint.siteLocation)) && (selectedComplaint.qtrNo || getQtrNoFromDesc(selectedComplaint.description)) && (
+                              <div className="p-3 bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
+                                <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase mb-0.5">Qtr No.</h4>
+                                <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                                  {selectedComplaint.qtrNo || getQtrNoFromDesc(selectedComplaint.description)}
                                 </p>
                               </div>
                             )}

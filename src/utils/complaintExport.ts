@@ -12,6 +12,8 @@ export interface ParsedExportData {
   department: string;
   locationType: string;
   selectedLocation: string;
+  townshipLocation?: string;
+  qtrNo?: string;
   specifiedLocation: string;
   complaintLocation: string;
   siteLocation: string;
@@ -60,6 +62,7 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
   let parsedLegacySite = '';
   let parsedPlantName = 'SAIL MIOM, CMLO';
   let parsedEmpType = complaint.designation || '';
+  let parsedQtrNo = '';
 
   // Parse location details footer if present
   if (rawDesc.includes('[Location & Posting Details]')) {
@@ -75,6 +78,9 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
 
     const townshipLocMatch = meta.match(/Township Location:\s*([^|\n]+)/i);
     if (townshipLocMatch) parsedTownshipLoc = townshipLocMatch[1].trim();
+
+    const qtrNoMatch = meta.match(/Qtr No\.:\s*([^|\n]+)/i);
+    if (qtrNoMatch) parsedQtrNo = qtrNoMatch[1].trim();
 
     const specifiedMatch = meta.match(/Specified Location:\s*([^|\n]+)/i);
     if (specifiedMatch) parsedSpecifiedLoc = specifiedMatch[1].trim();
@@ -106,6 +112,12 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     complaint.complaintLocation ||
     complaint.siteLocation ||
     'N/A';
+
+  const qtrNo = complaint.qtrNo || parsedQtrNo || '';
+  const townshipLocation =
+    complaint.townshipLocation ||
+    (locationType === 'Township' ? selectedLocation : '') ||
+    '';
 
   const specifiedLocation =
     complaint.specifiedLocation ||
@@ -149,6 +161,8 @@ export const parseComplaintExportData = (complaint: Complaint): ParsedExportData
     department: complaint.department || 'N/A',
     locationType: locationType || 'N/A',
     selectedLocation: selectedLocation || 'N/A',
+    townshipLocation: townshipLocation || (locationType === 'Township' ? selectedLocation : ''),
+    qtrNo: qtrNo || undefined,
     specifiedLocation: specifiedLocation,
     complaintLocation: (complaint as any).complaintLocation || parsedLegacyPlant || selectedLocation || 'N/A',
     siteLocation: (complaint as any).siteLocation || parsedLegacySite || selectedLocation || 'N/A',
@@ -185,6 +199,10 @@ export const downloadComplaintExcel = (complaint: Complaint) => {
 
   if (data.locationType === 'Plant' || data.specifiedLocation) {
     row['Specified Location'] = data.specifiedLocation || 'N/A';
+  }
+
+  if ((data.locationType === 'Township' || !data.locationType) && data.qtrNo) {
+    row['Qtr No.'] = data.qtrNo;
   }
 
   row['Nature of Complaint'] = data.natureOfComplaint;
@@ -372,8 +390,14 @@ export const downloadComplaintPDF = async (complaint: Complaint) => {
       }
     } else if (data.locationType === 'Township') {
       drawFieldRow('Township Location:', data.selectedLocation);
+      if (data.qtrNo) {
+        drawFieldRow('Qtr No.:', data.qtrNo);
+      }
     } else {
       drawFieldRow('Selected Location:', data.selectedLocation);
+      if (data.qtrNo) {
+        drawFieldRow('Qtr No.:', data.qtrNo);
+      }
     }
   } else {
     // Legacy fallback

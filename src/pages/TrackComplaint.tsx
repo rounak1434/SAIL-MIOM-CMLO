@@ -53,6 +53,12 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+const getQtrNoFromDesc = (desc?: string): string => {
+  if (!desc) return '';
+  const match = desc.match(/Qtr No\.:\s*([^|\n]+)/i);
+  return match ? match[1].trim() : '';
+};
+
 const TrackComplaintContent = () => {
   const location = useLocation();
   const [complaintId, setComplaintId] = useState('');
@@ -392,7 +398,7 @@ const TrackComplaintContent = () => {
                         {(complaint.locationType === 'Plant' || complaint.complaintLocation) ? 'Plant Location' : 'Township Location'}
                       </h4>
                       <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
-                        {complaint.selectedLocation || complaint.complaintLocation || complaint.siteLocation || 'N/A'}
+                        {complaint.townshipLocation || complaint.selectedLocation || complaint.complaintLocation || complaint.siteLocation || 'N/A'}
                       </p>
                     </div>
 
@@ -403,6 +409,17 @@ const TrackComplaintContent = () => {
                         </h4>
                         <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
                           {complaint.specifiedLocation || complaint.plantLocationDetails}
+                        </p>
+                      </div>
+                    )}
+
+                    {(complaint.locationType === 'Township' || (!complaint.locationType && complaint.siteLocation)) && (complaint.qtrNo || getQtrNoFromDesc(complaint.description)) && (
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B]">
+                        <h4 className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-wider mb-1">
+                          Qtr No.
+                        </h4>
+                        <p className="text-[#111827] dark:text-[#F9FAFB] text-sm font-medium">
+                          {complaint.qtrNo || getQtrNoFromDesc(complaint.description)}
                         </p>
                       </div>
                     )}

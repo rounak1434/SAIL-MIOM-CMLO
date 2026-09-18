@@ -70,6 +70,9 @@ export interface Complaint {
   locationType?: 'Plant' | 'Township' | string;
   selectedLocation?: string;
   specifiedLocation?: string;
+  townshipLocation?: string;
+  qtrNo?: string;
+  employmentType?: string;
   complaintLocation?: string;
   siteLocation?: string;
   plantLocationDetails?: string;
@@ -284,6 +287,9 @@ export const createComplaint = async (
       ...(complaintData.locationType ? { locationType: complaintData.locationType } : {}),
       ...(complaintData.selectedLocation ? { selectedLocation: complaintData.selectedLocation } : {}),
       ...(complaintData.specifiedLocation ? { specifiedLocation: complaintData.specifiedLocation } : {}),
+      ...(complaintData.townshipLocation ? { townshipLocation: complaintData.townshipLocation } : {}),
+      ...(complaintData.qtrNo ? { qtrNo: complaintData.qtrNo } : {}),
+      ...(complaintData.employmentType ? { employmentType: complaintData.employmentType } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

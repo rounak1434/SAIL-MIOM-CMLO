@@ -23,13 +23,14 @@ import {
   Layers,
   Wrench,
   Shield,
+  Home,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const PLANT_NAME = 'SAIL MIOM, CMLO';
 
-const EMPLOYMENT_TYPES = ['Regular', 'Contractual'] as const;
+const EMPLOYMENT_TYPES = ['Employ', 'Others'] as const;
 
 const DEPARTMENTS = [
   'Electrical',
@@ -99,6 +100,7 @@ interface ComplaintFormData {
   locationType: '' | 'Plant' | 'Township';
   selectedLocation: string;
   specifiedLocation: string;
+  qtrNo: string;
   natureOfComplaint: string;
   otherComplaintDetails: string;
   description: string;
@@ -115,6 +117,7 @@ const initialFormData: ComplaintFormData = {
   locationType: '',
   selectedLocation: '',
   specifiedLocation: '',
+  qtrNo: '',
   natureOfComplaint: '',
   otherComplaintDetails: '',
   description: '',
@@ -185,6 +188,7 @@ const FileComplaint = () => {
       locationType: newType,
       selectedLocation: '',
       specifiedLocation: '',
+      qtrNo: '',
     }));
   };
 
@@ -297,6 +301,10 @@ const FileComplaint = () => {
         setError('Please select a township location.');
         return;
       }
+      if (!formData.qtrNo.trim()) {
+        setError('Please enter Qtr No.');
+        return;
+      }
     }
 
     if (!formData.natureOfComplaint) {
@@ -357,6 +365,9 @@ const FileComplaint = () => {
         formData.locationType === 'Plant'
           ? `Plant Location: ${formData.selectedLocation}`
           : `Township Location: ${formData.selectedLocation}`,
+        ...(formData.locationType === 'Township' && formData.qtrNo.trim()
+          ? [`Qtr No.: ${formData.qtrNo.trim()}`]
+          : []),
         ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
           ? [`Specified Location: ${formData.specifiedLocation.trim()}`]
           : []),
@@ -381,6 +392,7 @@ const FileComplaint = () => {
         employeeId: formData.personalNo.trim(),
         department: finalDepartment,
         designation: formData.employmentType.trim(),
+        employmentType: formData.employmentType.trim(),
         category: fullNature,
         title: fullNature,
         description: fullDescription,
@@ -389,6 +401,12 @@ const FileComplaint = () => {
         userEmail: currentUser?.email || emailToUse,
         locationType: formData.locationType,
         selectedLocation: formData.selectedLocation,
+        ...(formData.locationType === 'Township'
+          ? {
+              townshipLocation: formData.selectedLocation,
+              qtrNo: formData.qtrNo.trim(),
+            }
+          : {}),
         ...(formData.locationType === 'Plant' && formData.specifiedLocation.trim()
           ? { specifiedLocation: formData.specifiedLocation.trim() }
           : {}),
@@ -537,6 +555,12 @@ const FileComplaint = () => {
                     </p>
                     <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.selectedLocation}</p>
                   </div>
+                  {submittedData.locationType === 'Township' && submittedData.qtrNo && (
+                    <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B]">
+                      <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Qtr No.</p>
+                      <p className="text-[#111827] dark:text-[#F9FAFB] font-medium text-sm">{submittedData.qtrNo}</p>
+                    </div>
+                  )}
                   {submittedData.locationType === 'Plant' && submittedData.specifiedLocation && (
                     <div className="bg-slate-50 dark:bg-[#12151B] p-3.5 rounded-xl border border-[#E5E7EB] dark:border-[#2B313B] sm:col-span-2">
                       <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mb-0.5">Specified Location</p>
@@ -856,29 +880,50 @@ const FileComplaint = () => {
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
+                    className="space-y-4"
                   >
-                    <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-[#9CA3AF]" />
-                      <span>
-                        Township Location <span className="text-red-500">*</span>
-                      </span>
-                    </label>
-                    <select
-                      name="selectedLocation"
-                      value={formData.selectedLocation}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
-                      required
-                    >
-                      <option value="" disabled>
-                        -- Select Township Location --
-                      </option>
-                      {TOWNSHIP_LOCATIONS.map((loc) => (
-                        <option key={loc} value={loc}>
-                          {loc}
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#9CA3AF]" />
+                        <span>
+                          Township Location <span className="text-red-500">*</span>
+                        </span>
+                      </label>
+                      <select
+                        name="selectedLocation"
+                        value={formData.selectedLocation}
+                        onChange={handleChange}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                        required
+                      >
+                        <option value="" disabled>
+                          -- Select Township Location --
                         </option>
-                      ))}
-                    </select>
+                        {TOWNSHIP_LOCATIONS.map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] dark:text-[#D1D5DB] mb-1.5 flex items-center gap-2">
+                        <Home className="w-4 h-4 text-[#9CA3AF]" />
+                        <span>
+                          Qtr No. <span className="text-red-500">*</span>
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        name="qtrNo"
+                        value={formData.qtrNo}
+                        onChange={handleChange}
+                        placeholder="Enter Qtr No."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] placeholder:text-[#9CA3AF] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] transition-all"
+                        required
+                      />
+                    </div>
                   </motion.div>
                 )}
               </div>

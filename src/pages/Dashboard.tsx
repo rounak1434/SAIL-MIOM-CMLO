@@ -1443,13 +1443,14 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Super Admin Direct Admin Creation Modal */}
-      {isSuperAdmin && (
-        <CreateAdminModal
-          isOpen={showCreateAdminModal}
-          onClose={() => setShowCreateAdminModal(false)}
-        />
-      )}
+      {/* Chief Admin & Super Admin Direct Account Creation Modal */}
+      <CreateAdminModal
+        isOpen={showCreateAdminModal}
+        onClose={() => setShowCreateAdminModal(false)}
+        onSuccess={() => {
+          setShowCreateAdminModal(false);
+        }}
+      />
 
       {/* Discreet Super Admin License & Security Controls Modal */}
       <SuperAdminLicenseModal

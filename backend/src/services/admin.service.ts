@@ -4,13 +4,17 @@ import { normalizePhoneNumber } from '../utils/phone.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export class AdminService {
-  public static async deleteUser(uid: string): Promise<{ success: boolean; message: string }> {
+  public static async deleteUser(uid: string, callerRole?: string): Promise<{ success: boolean; message: string }> {
     const existing = await prisma.user.findUnique({
       where: { uid },
     });
 
     if (!existing) {
       throw new AppError('User not found', 404);
+    }
+
+    if (existing.role === 'super_admin' && callerRole !== 'super_admin') {
+      throw new AppError('Unauthorized: Cannot delete Super Admin accounts', 403);
     }
 
     // Set assigned complaints to unassigned before deleting
@@ -36,7 +40,8 @@ export class AdminService {
 
   public static async updateUserPassword(
     uid: string,
-    newPassword: string
+    newPassword: string,
+    callerRole?: string
   ): Promise<{ success: boolean; message: string }> {
     if (newPassword.trim().length < 6) {
       throw new AppError('Password must be at least 6 characters long', 400);
@@ -48,6 +53,10 @@ export class AdminService {
 
     if (!existing) {
       throw new AppError('User not found', 404);
+    }
+
+    if (existing.role === 'super_admin' && callerRole !== 'super_admin') {
+      throw new AppError('Unauthorized: Cannot modify Super Admin account', 403);
     }
 
     const passwordHash = await bcrypt.hash(newPassword.trim(), 10);
@@ -72,7 +81,8 @@ export class AdminService {
       email?: string;
       phone?: string;
       role?: 'chief_admin' | 'admin' | 'moderator' | 'user';
-    }
+    },
+    callerRole?: string
   ): Promise<{ success: boolean; message: string }> {
     const existing = await prisma.user.findUnique({
       where: { uid },
@@ -80,6 +90,10 @@ export class AdminService {
 
     if (!existing) {
       throw new AppError('User not found', 404);
+    }
+
+    if (existing.role === 'super_admin' && callerRole !== 'super_admin') {
+      throw new AppError('Unauthorized: Cannot modify Super Admin account', 403);
     }
 
     const dataToUpdate: any = {};

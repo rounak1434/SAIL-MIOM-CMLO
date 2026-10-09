@@ -13,6 +13,7 @@ interface User {
   displayName?: string;
   phone?: string;
   role?: string;
+  superAdmin?: boolean;
   blocked?: boolean;
   isActive?: boolean;
   commentCount?: number;
@@ -41,38 +42,32 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [isSuperAdmin]);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       
-      // Load blocked users
-      const blocked = await getBlockedUsers();
-      setBlockedUsers(blocked.map(u => ({
-        id: u.id || u.uid || '',
-        email: u.email,
-        name: u.name,
-        displayName: u.businessName || u.name,
-        phone: u.phone,
-        role: u.role,
-        blocked: true,
-        isActive: u.isActive !== false
-      })));
-
-      // Load all registered users / staff
-      const users = await getAllUsers();
-      setAllUsers(users.map(u => ({
+      // Load all registered users / staff via protected server-side directory function
+      // (Super Admin accounts excluded for non-superAdmins by server)
+      const users = await getAllUsers(isSuperAdmin);
+      const mappedUsers = users.map(u => ({
         id: u.uid || u.id || '',
         email: u.email || '',
         name: u.name,
         displayName: u.displayName || u.businessName || u.name,
         phone: u.phone,
         role: u.role || 'user',
+        superAdmin: u.superAdmin === true,
         blocked: u.blocked === true,
         isActive: u.isActive !== false,
         commentCount: u.commentCount,
-      })));
+      }));
+      setAllUsers(mappedUsers);
+
+      // Blocked users are derived directly from the securely loaded user directory
+      const blocked = mappedUsers.filter(u => u.blocked === true);
+      setBlockedUsers(blocked);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -80,29 +75,37 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const handleToggleBlock = async (uid: string, currentlyBlocked: boolean) => {
+  const handleToggleBlock = async (uid: string, currentlyBlocked: boolean, userIsSuperAdmin?: boolean) => {
+    if (userIsSuperAdmin && !isSuperAdmin) {
+      alert('Cannot block a Super Admin account without Super Admin authorization');
+      return;
+    }
     try {
       setActionLoading(true);
-      await toggleUserBlock(uid, !currentlyBlocked);
+      await toggleUserBlock(uid, !currentlyBlocked, isSuperAdmin);
       await loadUsers();
       alert(`User ${!currentlyBlocked ? 'blocked' : 'unblocked'} successfully`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling block:', error);
-      alert('Failed to update user block status');
+      alert(error.message || 'Failed to update user block status');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleToggleActive = async (uid: string, currentlyActive: boolean) => {
+  const handleToggleActive = async (uid: string, currentlyActive: boolean, userIsSuperAdmin?: boolean) => {
+    if (userIsSuperAdmin && !isSuperAdmin) {
+      alert('Cannot deactivate a Super Admin account without Super Admin authorization');
+      return;
+    }
     try {
       setActionLoading(true);
-      await toggleModeratorStatus(uid, !currentlyActive);
+      await toggleModeratorStatus(uid, !currentlyActive, isSuperAdmin);
       await loadUsers();
       alert(`User ${!currentlyActive ? 'activated' : 'deactivated'} successfully`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling active status:', error);
-      alert('Failed to update user active status');
+      alert(error.message || 'Failed to update user active status');
     } finally {
       setActionLoading(false);
     }
@@ -110,6 +113,10 @@ const UserManagement: React.FC = () => {
 
   // Open password reset modal
   const handleChangePassword = (user: User) => {
+    if (user.superAdmin && !isSuperAdmin) {
+      alert('Cannot send password reset for a Super Admin account without Super Admin authorization');
+      return;
+    }
     setSelectedUser(user);
     setShowPasswordModal(true);
   };
@@ -117,10 +124,14 @@ const UserManagement: React.FC = () => {
   // Dispatch password reset email
   const handleSendPasswordResetEmail = async () => {
     if (!selectedUser?.email) return;
+    if (selectedUser.superAdmin && !isSuperAdmin) {
+      alert('Cannot send password reset for a Super Admin account without Super Admin authorization');
+      return;
+    }
     
     try {
       setActionLoading(true);
-      const res = await sendUserPasswordReset(selectedUser.email);
+      const res = await sendUserPasswordReset(selectedUser.email, isSuperAdmin);
       alert(res.message || `Password reset email sent to ${selectedUser.email}`);
       setShowPasswordModal(false);
       setSelectedUser(null);
@@ -134,6 +145,10 @@ const UserManagement: React.FC = () => {
 
   // Open edit modal
   const handleEditUser = (user: User) => {
+    if (user.superAdmin && !isSuperAdmin) {
+      alert('Cannot modify a Super Admin account without Super Admin authorization');
+      return;
+    }
     setSelectedUser(user);
     setEditForm({
       name: user.name || '',
@@ -148,17 +163,25 @@ const UserManagement: React.FC = () => {
   // Submit edit
   const handleSubmitEdit = async () => {
     if (!selectedUser) return;
+    if (selectedUser.superAdmin && !isSuperAdmin) {
+      alert('Cannot modify a Super Admin account without Super Admin authorization');
+      return;
+    }
     
     try {
       setActionLoading(true);
-      await updateUserData(selectedUser.id, {
-        name: editForm.name,
-        businessName: editForm.displayName,
-        displayName: editForm.displayName,
-        email: editForm.email,
-        phone: editForm.phone,
-        role: editForm.role as any,
-      });
+      await updateUserData(
+        selectedUser.id,
+        {
+          name: editForm.name,
+          businessName: editForm.displayName,
+          displayName: editForm.displayName,
+          email: editForm.email,
+          phone: editForm.phone,
+          role: editForm.role as any,
+        },
+        isSuperAdmin
+      );
       alert('User updated successfully');
       setShowEditModal(false);
       setSelectedUser(null);
@@ -171,7 +194,14 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const renderRoleBadge = (role?: string) => {
+  const renderRoleBadge = (role?: string, superAdmin?: boolean) => {
+    if (superAdmin) {
+      return (
+        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+          Super Admin
+        </span>
+      );
+    }
     const isChief = role === 'chief_admin' || role === 'CHIEF_ADMIN';
     const isAdmin = role === 'admin';
     const isMod = role === 'moderator';
@@ -186,10 +216,14 @@ const UserManagement: React.FC = () => {
           ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
           : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
       }`}>
-        {formatRoleDisplayName(role)}
+        {formatRoleDisplayName(role, superAdmin)}
       </span>
     );
   };
+
+  // Enforce Super Admin visibility boundary
+  const visibleUsers = allUsers.filter(u => isSuperAdmin || !u.superAdmin);
+  const visibleBlocked = blockedUsers.filter(u => isSuperAdmin || !u.superAdmin);
 
   if (loading) {
     return (
@@ -234,7 +268,7 @@ const UserManagement: React.FC = () => {
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
-          All Users ({allUsers.length})
+          All Users ({visibleUsers.length})
         </button>
         <button
           onClick={() => setActiveTab('deactivated')}
@@ -244,7 +278,7 @@ const UserManagement: React.FC = () => {
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
-          Deactivated ({allUsers.filter(u => u.isActive === false).length})
+          Deactivated ({visibleUsers.filter(u => u.isActive === false).length})
         </button>
         <button
           onClick={() => setActiveTab('blocked')}
@@ -254,19 +288,19 @@ const UserManagement: React.FC = () => {
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
-          Blocked Users ({blockedUsers.length})
+          Blocked Users ({visibleBlocked.length})
         </button>
       </div>
 
       {/* Deactivated Users List */}
       {activeTab === 'deactivated' && (
         <div className="space-y-4">
-          {allUsers.filter(u => u.isActive === false).length === 0 ? (
+          {visibleUsers.filter(u => u.isActive === false).length === 0 ? (
             <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
               <p className="text-slate-500 dark:text-slate-400">No deactivated accounts</p>
             </div>
           ) : (
-            allUsers.filter(u => u.isActive === false).map((user) => (
+            visibleUsers.filter(u => u.isActive === false).map((user) => (
               <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -276,25 +310,29 @@ const UserManagement: React.FC = () => {
                     <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
                     <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
                       <span>Role:</span>
-                      {renderRoleBadge(user.role)}
+                      {renderRoleBadge(user.role, user.superAdmin)}
                       <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => handleToggleActive(user.id, false)}
-                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
-                      disabled={actionLoading}
-                    >
-                      Reactivate
-                    </button>
-                    <button
-                      onClick={() => handleEditUser(user)}
-                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                      disabled={actionLoading}
-                    >
-                      Edit
-                    </button>
+                    {(!user.superAdmin || isSuperAdmin) && (
+                      <>
+                        <button
+                          onClick={() => handleToggleActive(user.id, false, user.superAdmin)}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                          disabled={actionLoading}
+                        >
+                          Reactivate
+                        </button>
+                        <button
+                          onClick={() => handleEditUser(user)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                          disabled={actionLoading}
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -306,7 +344,7 @@ const UserManagement: React.FC = () => {
       {/* All Users List */}
       {activeTab === 'all' && (
         <div className="space-y-4">
-          {allUsers.map((user) => (
+          {visibleUsers.map((user) => (
             <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -316,7 +354,7 @@ const UserManagement: React.FC = () => {
                   <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
                   <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
                     <span>Role:</span>
-                    {renderRoleBadge(user.role)}
+                    {renderRoleBadge(user.role, user.superAdmin)}
                     {user.blocked && (
                       <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
                     )}
@@ -326,42 +364,46 @@ const UserManagement: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => handleEditUser(user)}
-                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                    disabled={actionLoading}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleChangePassword(user)}
-                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                    disabled={actionLoading}
-                  >
-                    Reset Password
-                  </button>
-                  <button
-                    onClick={() => handleToggleBlock(user.id, user.blocked || false)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
-                      user.blocked
-                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
-                        : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 dark:text-rose-400 dark:border-rose-500/30'
-                    }`}
-                    disabled={actionLoading}
-                  >
-                    {user.blocked ? 'Unblock' : 'Block'}
-                  </button>
-                  <button
-                    onClick={() => handleToggleActive(user.id, user.isActive !== false)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
-                      user.isActive === false
-                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
-                        : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-400 dark:border-amber-500/30'
-                    }`}
-                    disabled={actionLoading}
-                  >
-                    {user.isActive === false ? 'Activate' : 'Deactivate'}
-                  </button>
+                  {(!user.superAdmin || isSuperAdmin) && (
+                    <>
+                      <button
+                        onClick={() => handleEditUser(user)}
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                        disabled={actionLoading}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleChangePassword(user)}
+                        className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                        disabled={actionLoading}
+                      >
+                        Reset Password
+                      </button>
+                      <button
+                        onClick={() => handleToggleBlock(user.id, user.blocked || false, user.superAdmin)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                          user.blocked
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                            : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 dark:text-rose-400 dark:border-rose-500/30'
+                        }`}
+                        disabled={actionLoading}
+                      >
+                        {user.blocked ? 'Unblock' : 'Block'}
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(user.id, user.isActive !== false, user.superAdmin)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                          user.isActive === false
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                            : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-400 dark:border-amber-500/30'
+                        }`}
+                        disabled={actionLoading}
+                      >
+                        {user.isActive === false ? 'Activate' : 'Deactivate'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -372,12 +414,12 @@ const UserManagement: React.FC = () => {
       {/* Blocked Users List */}
       {activeTab === 'blocked' && (
         <div className="space-y-4">
-          {blockedUsers.length === 0 ? (
+          {visibleBlocked.length === 0 ? (
             <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
               <p className="text-slate-500 dark:text-slate-400">No blocked users</p>
             </div>
           ) : (
-            blockedUsers.map((user) => (
+            visibleBlocked.map((user) => (
               <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -387,18 +429,20 @@ const UserManagement: React.FC = () => {
                     <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
                     <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
                       <span>Role:</span>
-                      {renderRoleBadge(user.role)}
+                      {renderRoleBadge(user.role, user.superAdmin)}
                       <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => handleToggleBlock(user.id, true)}
-                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
-                      disabled={actionLoading}
-                    >
-                      Unblock
-                    </button>
+                    {(!user.superAdmin || isSuperAdmin) && (
+                      <button
+                        onClick={() => handleToggleBlock(user.id, true, user.superAdmin)}
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                        disabled={actionLoading}
+                      >
+                        Unblock
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

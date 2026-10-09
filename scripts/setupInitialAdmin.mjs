@@ -345,6 +345,17 @@ async function main() {
     );
     console.log(`✅ Upserted Firestore profile: users/${uid}`);
 
+    // Synchronize trusted Super Admin registry for Firestore Security Rules
+    const registryDocRef = db.collection('systemSettings').doc('superAdminRegistry');
+    await registryDocRef.set(
+      {
+        uids: FieldValue.arrayUnion(uid),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    console.log(`✅ Registered Super Admin UID in systemSettings/superAdminRegistry`);
+
     // 4. Initialize Single Source of Truth: systemSettings/serviceLicense (Safe: only if missing)
     const licenseDocRef = db.collection('systemSettings').doc('serviceLicense');
     const licenseSnap = await licenseDocRef.get();

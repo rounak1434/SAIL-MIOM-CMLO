@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "setup-admin": "node scripts/setupInitialAdmin.mjs",
     "create-chief-admin": "node scripts/createChiefAdmin.mjs",
-    "test": "node tests/licenseSystem.test.mjs"
+    "test": "node tests/licenseSystem.test.mjs && node tests/superAdminVisibility.test.mjs"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

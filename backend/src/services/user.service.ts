@@ -3,13 +3,17 @@ import { AppError } from '../middleware/errorHandler.js';
 import { ModeratorDTO } from './moderator.service.js';
 
 export class UserService {
-  public static async toggleUserBlock(uid: string, blocked: boolean): Promise<void> {
+  public static async toggleUserBlock(uid: string, blocked: boolean, callerRole?: string): Promise<void> {
     const existing = await prisma.user.findUnique({
       where: { uid },
     });
 
     if (!existing) {
       throw new AppError('User not found', 404);
+    }
+
+    if (existing.role === 'super_admin' && callerRole !== 'super_admin') {
+      throw new AppError('Unauthorized: Cannot block Super Admin accounts', 403);
     }
 
     await prisma.user.update({
@@ -21,9 +25,14 @@ export class UserService {
     });
   }
 
-  public static async getBlockedUsers(): Promise<ModeratorDTO[]> {
+  public static async getBlockedUsers(isSuperAdminCaller: boolean = false): Promise<ModeratorDTO[]> {
+    const whereClause: any = { blocked: true };
+    if (!isSuperAdminCaller) {
+      whereClause.NOT = { role: 'super_admin' };
+    }
+
     const blocked = await prisma.user.findMany({
-      where: { blocked: true },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
     });
 

@@ -15,9 +15,10 @@ const blockSchema = z.object({
 // Get all blocked users
 userRouter.get(
   '/blocked',
-  async (_req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const blocked = await UserService.getBlockedUsers();
+      const isSuperAdmin = (req.user?.role as string) === 'super_admin';
+      const blocked = await UserService.getBlockedUsers(isSuperAdmin);
       res.status(200).json(blocked);
     } catch (error) {
       next(error);
@@ -31,7 +32,7 @@ userRouter.patch(
   validateBody(blockSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await UserService.toggleUserBlock(req.params.uid, req.body.blocked);
+      await UserService.toggleUserBlock(req.params.uid, req.body.blocked, req.user?.role);
       res.status(200).json({ success: true });
     } catch (error) {
       next(error);

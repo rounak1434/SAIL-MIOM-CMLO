@@ -37,7 +37,7 @@ const getNotificationTime = (createdAt: any): number => {
 };
 
 export const Navbar = () => {
-  const { currentUser, userRole, userName, userData } = useAuth();
+  const { currentUser, userRole, userName, userData, isSuperAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -398,11 +398,13 @@ export const Navbar = () => {
                               {userName || currentUser?.email}
                             </p>
                             <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                              userRole === 'chief_admin'
+                              isSuperAdmin
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'
+                                : userRole === 'chief_admin'
                                 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
                                 : 'bg-blue-100 text-[#2563EB] dark:bg-blue-900/50 dark:text-blue-300'
                             }`}>
-                              {userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
+                              {isSuperAdmin ? 'Super Admin' : userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
                             </span>
                           </div>
 
@@ -561,9 +563,9 @@ export const Navbar = () => {
                       {userName || currentUser?.email}
                     </p>
                     <p className={`text-xs mt-0.5 font-medium ${
-                      userRole === 'chief_admin' ? 'text-purple-600 dark:text-purple-400' : 'text-[#2563EB]'
+                      isSuperAdmin ? 'text-amber-600 dark:text-amber-400 font-semibold' : userRole === 'chief_admin' ? 'text-purple-600 dark:text-purple-400' : 'text-[#2563EB]'
                     }`}>
-                      {userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
+                      {isSuperAdmin ? 'Super Admin' : userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
                     </p>
                   </div>
                   {(userRole === 'admin' || userRole === 'chief_admin' || userRole === 'moderator') && (

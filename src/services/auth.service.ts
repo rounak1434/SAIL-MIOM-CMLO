@@ -40,7 +40,8 @@ export const isAdminRole = (role?: string | null): boolean => {
   return lower === 'admin' || lower === 'chief_admin';
 };
 
-export const formatRoleDisplayName = (role?: string | null): string => {
+export const formatRoleDisplayName = (role?: string | null, superAdmin?: boolean): string => {
+  if (superAdmin) return 'Super Admin';
   if (!role) return 'User';
   const lower = role.toLowerCase();
   if (lower === 'chief_admin') return 'Chief Admin';

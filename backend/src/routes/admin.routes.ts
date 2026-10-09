@@ -57,7 +57,7 @@ adminRouter.delete(
   '/users/:uid',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await AdminService.deleteUser(req.params.uid);
+      const result = await AdminService.deleteUser(req.params.uid, req.user?.role);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -73,7 +73,8 @@ adminRouter.patch(
     try {
       const result = await AdminService.updateUserPassword(
         req.params.uid,
-        req.body.newPassword
+        req.body.newPassword,
+        req.user?.role
       );
       res.status(200).json(result);
     } catch (error) {
@@ -89,7 +90,7 @@ adminRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (req.body.role && (req.body.role === 'admin' || req.body.role === 'chief_admin')) {
-        if (req.user?.role !== 'chief_admin') {
+        if (req.user?.role !== 'chief_admin' && req.user?.role !== ('super_admin' as any)) {
           res.status(403).json({ error: 'Only Chief Admins can assign Admin or Chief Admin roles' });
           return;
         }
@@ -97,7 +98,8 @@ adminRouter.patch(
 
       const result = await AdminService.updateUserData(
         req.params.uid,
-        req.body
+        req.body,
+        req.user?.role
       );
       res.status(200).json(result);
     } catch (error) {

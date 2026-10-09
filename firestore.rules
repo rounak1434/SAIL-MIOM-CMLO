@@ -60,14 +60,36 @@ service cloud.firestore {
              request.time >= get(/databases/$(database)/documents/systemSettings/serviceLicense).data.expiresAt;
     }
 
+    // Helper to identify Super Admin accounts across Firestore doc attributes and trusted registry
+    function isSuperAdminAccount(userId) {
+      return resource.data.superAdmin == true ||
+             resource.data.role == 'super_admin' ||
+             (exists(/databases/$(database)/documents/systemSettings/superAdminRegistry) &&
+              userId in get(/databases/$(database)/documents/systemSettings/superAdminRegistry).data.uids);
+    }
+
     // ============================================
     // USERS COLLECTION
     // ============================================
     match /users/{userId} {
-      // READ: Users can read own doc; Admin & Chief Admin can read all; Authenticated staff can read moderators list
-      allow read: if isAuthenticated() && (
+      // GET: Direct document lookup
+      // - Users can read their own profile (including Super Admin)
+      // - Super Admin can read any profile
+      // - Admins & Chief Admins can read any non-Super Admin profile
+      // - Moderators can read any non-Super Admin moderator profile
+      allow get: if isAuthenticated() && (
         request.auth.uid == userId ||
-        isAdmin() ||
+        isSuperAdmin() ||
+        (isAdmin() && !isSuperAdminAccount(userId)) ||
+        (resource.data.role == 'moderator' && isModerator() && !isSuperAdminAccount(userId))
+      );
+
+      // LIST: Collection queries
+      // - Super Admin can list all users directly
+      // - Authenticated staff can query moderators
+      // - General collection queries by lower roles are rejected (they must use the secure server-side getManagedUsers function)
+      allow list: if isAuthenticated() && (
+        isSuperAdmin() ||
         (resource.data.role == 'moderator' && isModerator())
       );
 
@@ -75,28 +97,45 @@ service cloud.firestore {
       // - Regular users create own profile on registration strictly with role='user'
       // - Chief Admin can create Admin, Chief Admin, and Moderator accounts
       // - Admin can create Moderator and user accounts
+      // - Lower roles can NEVER create accounts with superAdmin=true or role='super_admin'
       allow create: if isAuthenticated() && (
-        (request.auth.uid == userId &&
-         request.resource.data.role == 'user' &&
-         request.resource.data.blocked == false &&
-         request.resource.data.isActive == true &&
-         !('permissions' in request.resource.data))
-        || (isChiefAdmin() && request.resource.data.role in ['admin', 'chief_admin', 'CHIEF_ADMIN', 'moderator', 'user'])
-        || (isAdmin() && request.resource.data.role in ['moderator', 'user'])
+        (!('superAdmin' in request.resource.data) || request.resource.data.superAdmin == false || isSuperAdmin()) &&
+        ((!('role' in request.resource.data)) || request.resource.data.role != 'super_admin' || isSuperAdmin()) &&
+        (
+          (request.auth.uid == userId &&
+           request.resource.data.role == 'user' &&
+           request.resource.data.blocked == false &&
+           request.resource.data.isActive == true &&
+           !('permissions' in request.resource.data))
+          || (isChiefAdmin() && request.resource.data.role in ['admin', 'chief_admin', 'CHIEF_ADMIN', 'moderator', 'user'])
+          || (isAdmin() && request.resource.data.role in ['moderator', 'user'])
+        )
       );
 
-      // UPDATE: Chief Admin can assign all roles; Admin can update profiles or assign moderator/user roles; Users can update profile info only
+      // UPDATE:
+      // - Super Admin can update any profile (and only Super Admin can touch a Super Admin account)
+      // - Chief Admin can update non-Super Admin profiles and assign roles
+      // - Admin can update non-Super Admin profiles or assign moderator/user roles
+      // - Users can update their own non-sensitive profile info only
+      // - Lower roles cannot modify or grant superAdmin status or role='super_admin'
       allow update: if isAuthenticated() && (
-        (isChiefAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'])) ||
-        (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['moderator', 'user'] || request.resource.data.role == resource.data.role)) ||
-        (request.auth.uid == userId &&
-         resource.data.blocked != true &&
-         resource.data.isActive != false &&
-         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin']))
+        isSuperAdmin() ||
+        (!isSuperAdminAccount(userId) &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['superAdmin']) &&
+         (!('role' in request.resource.data) || request.resource.data.role != 'super_admin') && (
+           (isChiefAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'])) ||
+           (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['moderator', 'user'] || request.resource.data.role == resource.data.role)) ||
+           (request.auth.uid == userId &&
+            resource.data.blocked != true &&
+            resource.data.isActive != false &&
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin']))
+        ))
       );
 
-      // DELETE: Admins and Chief Admins
-      allow delete: if isAdmin();
+      // DELETE:
+      // - Super Admin can delete accounts
+      // - Admins/Chief Admins can delete non-Super Admin accounts only
+      allow delete: if isSuperAdmin() || (isAdmin() && !isSuperAdminAccount(userId));
     }
 
     // ============================================

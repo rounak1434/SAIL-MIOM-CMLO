@@ -286,8 +286,8 @@ export const Navbar = () => {
               <>
                 {/* Logged In User - Desktop */}
                 <div className="hidden md:flex items-center gap-2 sm:gap-3">
-                  {(userRole === 'admin' || userRole === 'moderator') && (
-                    <Link to={userRole === 'admin' ? '/dashboard' : '/moderator-dashboard'}>
+                  {(userRole === 'admin' || userRole === 'chief_admin' || userRole === 'moderator') && (
+                    <Link to={userRole === 'admin' || userRole === 'chief_admin' ? '/dashboard' : '/moderator-dashboard'}>
                       <button className="px-3.5 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-medium text-sm whitespace-nowrap flex items-center gap-2 shadow-xs transition-colors">
                         <LayoutDashboard className="w-4 h-4" />
                         Dashboard
@@ -397,13 +397,17 @@ export const Navbar = () => {
                             <p className="text-sm font-semibold text-[#111827] dark:text-[#F9FAFB] truncate mt-0.5">
                               {userName || currentUser?.email}
                             </p>
-                            <span className="inline-block mt-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-[#2563EB] dark:bg-blue-900/50 dark:text-blue-300 capitalize">
-                              {userRole}
+                            <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
+                              userRole === 'chief_admin'
+                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                                : 'bg-blue-100 text-[#2563EB] dark:bg-blue-900/50 dark:text-blue-300'
+                            }`}>
+                              {userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
                             </span>
                           </div>
 
                           <div className="p-1">
-                            {(userRole === 'admin' || userRole === 'moderator') && (
+                            {(userRole === 'admin' || userRole === 'chief_admin' || userRole === 'moderator') && (
                               <Link
                                 to="/profile"
                                 onClick={() => setShowProfileMenu(false)}
@@ -541,9 +545,9 @@ export const Navbar = () => {
                 </div>
               ) : (
                 <div className="pt-2 border-t border-[#E5E7EB] dark:border-[#2B313B] space-y-2">
-                  {(userRole === 'admin' || userRole === 'moderator') && (
+                  {(userRole === 'admin' || userRole === 'chief_admin' || userRole === 'moderator') && (
                     <Link
-                      to={userRole === 'admin' ? '/dashboard' : '/moderator-dashboard'}
+                      to={userRole === 'admin' || userRole === 'chief_admin' ? '/dashboard' : '/moderator-dashboard'}
                       onClick={() => setMobileMenuOpen(false)}
                       className="block px-4 py-2.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-medium text-sm flex items-center gap-2"
                     >
@@ -556,9 +560,13 @@ export const Navbar = () => {
                     <p className="text-sm font-semibold text-[#111827] dark:text-[#F9FAFB]">
                       {userName || currentUser?.email}
                     </p>
-                    <p className="text-xs text-[#2563EB] capitalize mt-0.5">{userRole}</p>
+                    <p className={`text-xs mt-0.5 font-medium ${
+                      userRole === 'chief_admin' ? 'text-purple-600 dark:text-purple-400' : 'text-[#2563EB]'
+                    }`}>
+                      {userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
+                    </p>
                   </div>
-                  {(userRole === 'admin' || userRole === 'moderator') && (
+                  {(userRole === 'admin' || userRole === 'chief_admin' || userRole === 'moderator') && (
                     <Link
                       to="/profile"
                       onClick={() => setMobileMenuOpen(false)}

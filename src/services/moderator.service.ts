@@ -22,7 +22,7 @@ export interface Moderator {
   businessName: string;
   email: string;
   phone: string;
-  role: 'moderator' | 'user' | 'admin';
+  role: 'moderator' | 'user' | 'admin' | 'chief_admin';
   isActive?: boolean;
   blocked?: boolean;
   createdAt: any;

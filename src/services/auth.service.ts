@@ -26,9 +26,32 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
+export type AppRole = 'chief_admin' | 'admin' | 'moderator' | 'user';
+
+export const isChiefAdminRole = (role?: string | null): boolean => {
+  if (!role) return false;
+  const lower = role.toLowerCase();
+  return lower === 'chief_admin';
+};
+
+export const isAdminRole = (role?: string | null): boolean => {
+  if (!role) return false;
+  const lower = role.toLowerCase();
+  return lower === 'admin' || lower === 'chief_admin';
+};
+
+export const formatRoleDisplayName = (role?: string | null): string => {
+  if (!role) return 'User';
+  const lower = role.toLowerCase();
+  if (lower === 'chief_admin') return 'Chief Admin';
+  if (lower === 'admin') return 'Admin';
+  if (lower === 'moderator') return 'Moderator';
+  return 'User';
+};
+
 export interface UserRole {
   email: string;
-  role: 'admin' | 'moderator' | 'user';
+  role: AppRole;
   displayName?: string;
   name?: string;
   createdAt?: any;
@@ -38,7 +61,7 @@ export interface UserProfileResponse {
   uid: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'moderator' | 'user';
+  role: AppRole;
   name: string;
   businessName?: string | null;
   phone?: string | null;
@@ -72,13 +95,23 @@ export const loginUser = async (
 
   // 2. Force token refresh to fetch latest custom claims immediately
   const tokenResult = await fbUser.getIdTokenResult(true);
-  const claimsRole = tokenResult.claims.role as 'admin' | 'moderator' | 'user' | undefined;
+  const claimsRaw = tokenResult.claims.role as string | undefined;
+  const claimsRole: AppRole | undefined =
+    claimsRaw?.toLowerCase() === 'chief_admin'
+      ? 'chief_admin'
+      : claimsRaw?.toLowerCase() === 'admin'
+      ? 'admin'
+      : claimsRaw?.toLowerCase() === 'moderator'
+      ? 'moderator'
+      : claimsRaw
+      ? 'user'
+      : undefined;
 
   // 3. Fetch User Profile Document from Firestore
   const userDocRef = doc(db, 'users', fbUser.uid);
   const userDocSnap = await getDoc(userDocRef);
 
-  let role: 'admin' | 'moderator' | 'user' = claimsRole || 'user';
+  let role: AppRole = claimsRole || 'user';
   let displayName = fbUser.displayName || cleanEmail.split('@')[0];
   let name = displayName;
   let blocked = false;
@@ -86,7 +119,26 @@ export const loginUser = async (
 
   if (userDocSnap.exists()) {
     const data = userDocSnap.data();
-    role = claimsRole || (data.role as 'admin' | 'moderator' | 'user') || 'user';
+    const docRaw = data.role as string | undefined;
+    const docRole: AppRole =
+      docRaw?.toLowerCase() === 'chief_admin'
+        ? 'chief_admin'
+        : docRaw?.toLowerCase() === 'admin'
+        ? 'admin'
+        : docRaw?.toLowerCase() === 'moderator'
+        ? 'moderator'
+        : 'user';
+
+    const docLower = docRole?.toLowerCase();
+    const claimLower = claimsRole?.toLowerCase();
+    role =
+      claimLower === 'chief_admin' || docLower === 'chief_admin'
+        ? 'chief_admin'
+        : claimLower === 'admin' || docLower === 'admin'
+        ? 'admin'
+        : claimLower === 'moderator' || docLower === 'moderator'
+        ? 'moderator'
+        : 'user';
     displayName = data.displayName || data.name || displayName;
     name = data.name || displayName;
     blocked = data.blocked === true;

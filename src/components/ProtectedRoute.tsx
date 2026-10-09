@@ -1,17 +1,18 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardSkeleton from './DashboardSkeleton';
+import { AppRole } from '../services/auth.service';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'moderator';
+  requiredRole?: 'admin' | 'moderator' | 'chief_admin';
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
   requiredRole 
 }) => {
-  const { currentUser, userRole, loading, isBlocked } = useAuth();
+  const { currentUser, userRole, loading, isBlocked, isChiefAdmin, isAdmin } = useAuth();
 
   // Show skeleton UI while checking authentication
   if (loading) {
@@ -39,18 +40,30 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Role-based access control - strict check
-  if (requiredRole && userRole !== requiredRole) {
-    console.warn(`ProtectedRoute: Access denied. Required: ${requiredRole}, User has: ${userRole}`);
-    
-    // Redirect based on actual role
-    if (userRole === 'admin') {
-      return <Navigate to="/dashboard" replace />;
-    } else if (userRole === 'moderator') {
-      return <Navigate to="/moderator-dashboard" replace />;
+  // Chief Admin has ALL permissions of Admin
+  if (requiredRole) {
+    let hasAccess = false;
+    if (requiredRole === 'admin') {
+      hasAccess = isAdmin; // admin, chief_admin, superAdmin
+    } else if (requiredRole === 'chief_admin') {
+      hasAccess = isChiefAdmin;
+    } else {
+      hasAccess = userRole === requiredRole;
     }
-    
-    // Regular users cannot access any dashboard
-    return <Navigate to="/" replace />;
+
+    if (!hasAccess) {
+      console.warn(`ProtectedRoute: Access denied. Required: ${requiredRole}, User has: ${userRole}`);
+      
+      // Redirect based on actual role
+      if (userRole === 'admin' || userRole === 'chief_admin') {
+        return <Navigate to="/dashboard" replace />;
+      } else if (userRole === 'moderator') {
+        return <Navigate to="/moderator-dashboard" replace />;
+      }
+      
+      // Regular users cannot access any dashboard
+      return <Navigate to="/" replace />;
+    }
   }
 
   return <>{children}</>;

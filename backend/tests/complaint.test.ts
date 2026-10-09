@@ -65,7 +65,7 @@ describe('Complaints API (/api/complaints)', () => {
         employeeId: 'EMP-9999',
         department: 'Blast Furnace',
         designation: 'Technician',
-        category: 'Computer Complaint',
+        category: 'Electrical Complaint',
         title: 'Monitor display flickering',
         description: 'The monitor turns black every few seconds during shift operation.',
         priority: 'medium',
@@ -85,7 +85,7 @@ describe('Complaints API (/api/complaints)', () => {
         employeeId: 'EMP-9999',
         department: 'Blast Furnace',
         designation: 'Technician',
-        category: 'Computer Complaint',
+        category: 'Electrical Complaint',
         title: 'Another ticket',
         description: 'Duplicate attempt',
       });

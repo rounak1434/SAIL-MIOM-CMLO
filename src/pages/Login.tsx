@@ -26,7 +26,7 @@ export const Login = () => {
         logoutUser();
         return;
       }
-      if (userRole === 'admin') {
+      if (userRole === 'admin' || userRole === 'chief_admin') {
         navigate('/dashboard', { replace: true });
       } else if (userRole === 'moderator') {
         navigate('/moderator-dashboard', { replace: true });
@@ -91,15 +91,16 @@ export const Login = () => {
           return;
         }
       } else {
-        if (userRoleFromDB !== 'admin') {
-          setError('Access denied. Admin credentials required.');
+        const isPermittedAdmin = userRoleFromDB === 'admin' || userRoleFromDB === 'chief_admin';
+        if (!isPermittedAdmin) {
+          setError('Access denied. Administrator credentials required.');
           setLoading(false);
           await logoutUser();
           return;
         }
       }
       
-      if (userRoleFromDB === 'admin') {
+      if (userRoleFromDB === 'admin' || userRoleFromDB === 'chief_admin') {
         navigate('/dashboard', { replace: true });
       } else if (userRoleFromDB === 'moderator') {
         navigate('/moderator-dashboard', { replace: true });

@@ -15,19 +15,37 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.superAdmin == true;
     }
 
-    // Admin authorized via custom claim, Super Admin, or verified Firestore admin profile
+    // Admin authorized via custom claim, Chief Admin, Super Admin, or verified Firestore admin profile
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'chief_admin' ||
+        request.auth.token.role == 'CHIEF_ADMIN' ||
         isSuperAdmin() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chief_admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CHIEF_ADMIN') &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true)
       );
     }
 
-    // Moderator authorized via custom claim, Admin, or Super Admin
+    // Chief Admin authorized via custom claim, Super Admin, or verified Firestore chief_admin profile
+    function isChiefAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'chief_admin' ||
+        request.auth.token.role == 'CHIEF_ADMIN' ||
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chief_admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CHIEF_ADMIN') &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true)
+      );
+    }
+
+    // Moderator authorized via custom claim, Admin, Chief Admin, or Super Admin
     function isModerator() {
       return isAuthenticated() && (
         request.auth.token.role == 'moderator' ||
@@ -46,33 +64,38 @@ service cloud.firestore {
     // USERS COLLECTION
     // ============================================
     match /users/{userId} {
-      // READ: Users can read own doc; Admin can read all; Authenticated staff can read moderators list
+      // READ: Users can read own doc; Admin & Chief Admin can read all; Authenticated staff can read moderators list
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
         isAdmin() ||
         (resource.data.role == 'moderator' && isModerator())
       );
 
-      // CREATE: Users create own profile on registration strictly as role='user'
+      // CREATE:
+      // - Regular users create own profile on registration strictly with role='user'
+      // - Chief Admin can create Admin, Chief Admin, and Moderator accounts
+      // - Admin can create Moderator and user accounts
       allow create: if isAuthenticated() && (
         (request.auth.uid == userId &&
          request.resource.data.role == 'user' &&
          request.resource.data.blocked == false &&
          request.resource.data.isActive == true &&
          !('permissions' in request.resource.data))
-        || isAdmin()
+        || (isChiefAdmin() && request.resource.data.role in ['admin', 'chief_admin', 'CHIEF_ADMIN', 'moderator', 'user'])
+        || (isAdmin() && request.resource.data.role in ['moderator', 'user'])
       );
 
-      // UPDATE: Admins can update; Users can only update their profile info (not role, blocked, isActive, superAdmin)
+      // UPDATE: Chief Admin can assign all roles; Admin can update profiles or assign moderator/user roles; Users can update profile info only
       allow update: if isAuthenticated() && (
-        isAdmin() ||
+        (isChiefAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'])) ||
+        (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['moderator', 'user'] || request.resource.data.role == resource.data.role)) ||
         (request.auth.uid == userId &&
          resource.data.blocked != true &&
          resource.data.isActive != false &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin']))
       );
 
-      // DELETE: Admins only
+      // DELETE: Admins and Chief Admins
       allow delete: if isAdmin();
     }
 

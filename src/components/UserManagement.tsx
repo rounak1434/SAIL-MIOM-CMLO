@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { getBlockedUsers, toggleUserBlock, getAllModerators, toggleModeratorStatus } from '../services/moderator.service';
-import { sendUserPasswordReset, updateUserData } from '../services/admin.service';
-import { Info, Mail } from 'lucide-react';
+import { getBlockedUsers, toggleUserBlock, toggleModeratorStatus } from '../services/moderator.service';
+import { sendUserPasswordReset, updateUserData, getAllUsers } from '../services/admin.service';
+import { Info, Mail, UserPlus, Shield } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { formatRoleDisplayName } from '../services/auth.service';
+import CreateAdminModal from './CreateAdminModal';
 
 interface User {
   id: string;
@@ -16,6 +19,7 @@ interface User {
 }
 
 const UserManagement: React.FC = () => {
+  const { isChiefAdmin, isSuperAdmin } = useAuth();
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,9 +28,15 @@ const UserManagement: React.FC = () => {
   // Modal states
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [editForm, setEditForm] = useState({ name: '', displayName: '', email: '', phone: '' });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    displayName: '',
+    email: '',
+    phone: '',
+    role: 'moderator',
+  });
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -40,7 +50,7 @@ const UserManagement: React.FC = () => {
       // Load blocked users
       const blocked = await getBlockedUsers();
       setBlockedUsers(blocked.map(u => ({
-        id: u.id || '',
+        id: u.id || u.uid || '',
         email: u.email,
         name: u.name,
         displayName: u.businessName || u.name,
@@ -50,17 +60,18 @@ const UserManagement: React.FC = () => {
         isActive: u.isActive !== false
       })));
 
-      // Load all moderators
-      const moderators = await getAllModerators();
-      setAllUsers(moderators.map(m => ({
-        id: m.id || '',
-        email: m.email,
-        name: m.name,
-        displayName: m.businessName || m.name,
-        phone: m.phone,
-        role: m.role,
-        blocked: m.blocked === true,
-        isActive: m.isActive !== false
+      // Load all registered users / staff
+      const users = await getAllUsers();
+      setAllUsers(users.map(u => ({
+        id: u.uid || u.id || '',
+        email: u.email || '',
+        name: u.name,
+        displayName: u.displayName || u.businessName || u.name,
+        phone: u.phone,
+        role: u.role || 'user',
+        blocked: u.blocked === true,
+        isActive: u.isActive !== false,
+        commentCount: u.commentCount,
       })));
     } catch (error) {
       console.error('Error loading users:', error);
@@ -128,7 +139,8 @@ const UserManagement: React.FC = () => {
       name: user.name || '',
       displayName: user.displayName || '',
       email: user.email || '',
-      phone: user.phone || ''
+      phone: user.phone || '',
+      role: user.role || 'user',
     });
     setShowEditModal(true);
   };
@@ -141,12 +153,11 @@ const UserManagement: React.FC = () => {
       setActionLoading(true);
       await updateUserData(selectedUser.id, {
         name: editForm.name,
-        // The "Business Name" field is stored in `businessName` for moderators
-        // (which the list reads). Keep displayName in sync for other consumers.
         businessName: editForm.displayName,
         displayName: editForm.displayName,
         email: editForm.email,
-        phone: editForm.phone
+        phone: editForm.phone,
+        role: editForm.role as any,
       });
       alert('User updated successfully');
       setShowEditModal(false);
@@ -160,6 +171,26 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const renderRoleBadge = (role?: string) => {
+    const isChief = role === 'chief_admin' || role === 'CHIEF_ADMIN';
+    const isAdmin = role === 'admin';
+    const isMod = role === 'moderator';
+
+    return (
+      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+        isChief
+          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+          : isAdmin
+          ? 'bg-blue-100 text-[#2563EB] dark:bg-blue-900/50 dark:text-blue-300'
+          : isMod
+          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+      }`}>
+        {formatRoleDisplayName(role)}
+      </span>
+    );
+  };
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -171,14 +202,25 @@ const UserManagement: React.FC = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">User Management</h2>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Staff &amp; User Management</h2>
+        {(isChiefAdmin || isSuperAdmin) && (
+          <button
+            onClick={() => setShowCreateAccountModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs shadow-xs transition-colors cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Create Account</span>
+          </button>
+        )}
+      </div>
 
       {/* Admin Information Note */}
       <div className="mb-6 p-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 flex items-start gap-3 text-xs text-blue-900 dark:text-blue-200">
         <Info className="w-4 h-4 text-[#2563EB] dark:text-blue-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-semibold">Account Management Notice: </span>
-          <span>To restrict an account, use <strong>Block</strong> or <strong>Deactivate</strong>. To permanently remove a Firebase Authentication account, use the trusted administrator CLI. Web deletion is disabled on the Spark plan.</span>
+          <span>To restrict an account, use <strong>Block</strong> or <strong>Deactivate</strong>. Chief Admins can create Admin, Chief Admin, and Moderator accounts directly.</span>
         </div>
       </div>
 
@@ -192,7 +234,7 @@ const UserManagement: React.FC = () => {
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
-          All Moderators ({allUsers.length})
+          All Users ({allUsers.length})
         </button>
         <button
           onClick={() => setActiveTab('deactivated')}
@@ -221,7 +263,7 @@ const UserManagement: React.FC = () => {
         <div className="space-y-4">
           {allUsers.filter(u => u.isActive === false).length === 0 ? (
             <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">No deactivated moderators</p>
+              <p className="text-slate-500 dark:text-slate-400">No deactivated accounts</p>
             </div>
           ) : (
             allUsers.filter(u => u.isActive === false).map((user) => (
@@ -232,22 +274,23 @@ const UserManagement: React.FC = () => {
                       {user.displayName || user.name || 'Unnamed User'}
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
-                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500">
-                      <span>Role: <strong className="text-slate-700 dark:text-slate-300 capitalize">{user.role}</strong></span>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
+                      <span>Role:</span>
+                      {renderRoleBadge(user.role)}
                       <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => handleToggleActive(user.id, false)}
-                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
                       disabled={actionLoading}
                     >
-                      Reactivate Moderator
+                      Reactivate
                     </button>
                     <button
                       onClick={() => handleEditUser(user)}
-                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                       disabled={actionLoading}
                     >
                       Edit
@@ -271,9 +314,9 @@ const UserManagement: React.FC = () => {
                     {user.displayName || user.name || 'Unnamed User'}
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
-                  <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500">
-                    <span>Role: <strong className="text-slate-700 dark:text-slate-300 capitalize">{user.role}</strong></span>
-                    <span>Comments: {user.commentCount || 0}/5</span>
+                  <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
+                    <span>Role:</span>
+                    {renderRoleBadge(user.role)}
                     {user.blocked && (
                       <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
                     )}
@@ -285,21 +328,21 @@ const UserManagement: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => handleEditUser(user)}
-                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                     disabled={actionLoading}
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleChangePassword(user)}
-                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                     disabled={actionLoading}
                   >
                     Reset Password
                   </button>
                   <button
                     onClick={() => handleToggleBlock(user.id, user.blocked || false)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
                       user.blocked
                         ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
                         : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 dark:text-rose-400 dark:border-rose-500/30'
@@ -310,7 +353,7 @@ const UserManagement: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleToggleActive(user.id, user.isActive !== false)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
                       user.isActive === false
                         ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
                         : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-400 dark:border-amber-500/30'
@@ -319,16 +362,48 @@ const UserManagement: React.FC = () => {
                   >
                     {user.isActive === false ? 'Activate' : 'Deactivate'}
                   </button>
-                  <span
-                    className="text-[11px] text-slate-400 dark:text-slate-500 italic ml-1 select-none"
-                    title="Permanent account deletion is available via administrator CLI"
-                  >
-                    CLI deletion only
-                  </span>
                 </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Blocked Users List */}
+      {activeTab === 'blocked' && (
+        <div className="space-y-4">
+          {blockedUsers.length === 0 ? (
+            <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
+              <p className="text-slate-500 dark:text-slate-400">No blocked users</p>
+            </div>
+          ) : (
+            blockedUsers.map((user) => (
+              <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      {user.displayName || user.name || 'Unnamed User'}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
+                      <span>Role:</span>
+                      {renderRoleBadge(user.role)}
+                      <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleToggleBlock(user.id, true)}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                      disabled={actionLoading}
+                    >
+                      Unblock
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
       
@@ -346,14 +421,14 @@ const UserManagement: React.FC = () => {
               <strong className="text-slate-900 dark:text-white">{selectedUser.email}</strong>
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 bg-slate-50 dark:bg-[#12151B] p-3 rounded-xl border border-slate-200 dark:border-slate-800 leading-relaxed">
-              On the Firebase Spark plan, password resets are processed via official Firebase Authentication emails. The user will receive instructions to safely set a new password.
+              Password resets are processed via official Firebase Authentication emails. The user will receive instructions to safely set a new password.
             </p>
             
             <div className="flex gap-3">
               <button
                 onClick={handleSendPasswordResetEmail}
                 disabled={actionLoading}
-                className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 text-sm"
+                className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 text-sm cursor-pointer"
               >
                 {actionLoading ? 'Sending...' : 'Send Reset Email'}
               </button>
@@ -362,7 +437,7 @@ const UserManagement: React.FC = () => {
                   setShowPasswordModal(false);
                   setSelectedUser(null);
                 }}
-                className="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded-lg transition-colors text-sm"
+                className="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded-lg transition-colors text-sm cursor-pointer"
                 disabled={actionLoading}
               >
                 Cancel
@@ -389,7 +464,7 @@ const UserManagement: React.FC = () => {
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
                   placeholder="Full name"
                 />
               </div>
@@ -402,10 +477,28 @@ const UserManagement: React.FC = () => {
                   type="text"
                   value={editForm.displayName}
                   onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
                   placeholder="e.g. Electrical Department"
                 />
               </div>
+
+              {(isChiefAdmin || isSuperAdmin) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Role
+                  </label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
+                  >
+                    <option value="moderator">Moderator</option>
+                    <option value="admin">Admin</option>
+                    <option value="chief_admin">Chief Admin</option>
+                    <option value="user">User</option>
+                  </select>
+                </div>
+              )}
               
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -415,7 +508,7 @@ const UserManagement: React.FC = () => {
                   type="email"
                   value={editForm.email}
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
                   placeholder="Email address"
                 />
               </div>
@@ -428,7 +521,7 @@ const UserManagement: React.FC = () => {
                   type="text"
                   value={editForm.phone}
                   onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
                   placeholder="Enter phone number"
                 />
               </div>
@@ -438,7 +531,7 @@ const UserManagement: React.FC = () => {
               <button
                 onClick={handleSubmitEdit}
                 disabled={actionLoading}
-                className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 text-sm cursor-pointer"
               >
                 {actionLoading ? 'Saving...' : 'Save Changes'}
               </button>
@@ -447,7 +540,7 @@ const UserManagement: React.FC = () => {
                   setShowEditModal(false);
                   setSelectedUser(null);
                 }}
-                className="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded-lg transition-colors"
+                className="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded-lg transition-colors text-sm cursor-pointer"
                 disabled={actionLoading}
               >
                 Cancel
@@ -456,6 +549,16 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Create Account Modal */}
+      <CreateAdminModal
+        isOpen={showCreateAccountModal}
+        onClose={() => setShowCreateAccountModal(false)}
+        onSuccess={() => {
+          setShowCreateAccountModal(false);
+          loadUsers();
+        }}
+      />
     </div>
   );
 };

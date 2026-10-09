@@ -62,7 +62,7 @@ const Dashboard = () => {
   const [assigningComplaint, setAssigningComplaint] = useState<Complaint | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [dashboardLoading, setDashboardLoading] = useState(true);
-  const { currentUser, userRole, isSuperAdmin } = useAuth();
+  const { currentUser, userRole, isSuperAdmin, isChiefAdmin, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'complaints' | 'users'>('complaints');
   const [showSuperAdminModal, setShowSuperAdminModal] = useState(false);
   const [showCreateAdminModal, setShowCreateAdminModal] = useState(false);
@@ -124,7 +124,7 @@ const Dashboard = () => {
         });
 
         // Subscribe to real-time active moderators
-        if (userRole === 'admin') {
+        if (isAdmin || userRole === 'admin' || userRole === 'chief_admin') {
           unsubscribeModerators = subscribeToActiveModerators((data) => {
             if (mounted) {
               setModerators(data);
@@ -155,8 +155,8 @@ const Dashboard = () => {
 
   const loadModerators = async () => {
     try {
-      // Only admins can load moderators
-      if (userRole !== 'admin') {
+      // Only admins and chief admins can load moderators
+      if (!isAdmin && userRole !== 'admin' && userRole !== 'chief_admin') {
         console.warn('loadModerators: User is not admin, skipping');
         return;
       }
@@ -176,8 +176,8 @@ const Dashboard = () => {
     e.preventDefault();
     
     try {
-      // Only admins can create moderators
-      if (userRole !== 'admin') {
+      // Only admins and chief admins can create moderators
+      if (!isAdmin && userRole !== 'admin' && userRole !== 'chief_admin') {
         alert('Access denied: Admin privileges required');
         return;
       }
@@ -210,7 +210,7 @@ const Dashboard = () => {
   const handleDeactivateModerator = async (id: string) => {
     if (window.confirm('Are you sure you want to deactivate this moderator? They will be signed out and immediately removed from active Moderator Management until reactivated in User Management.')) {
       try {
-        if (userRole !== 'admin') {
+        if (!isAdmin && userRole !== 'admin' && userRole !== 'chief_admin') {
           alert('Access denied: Admin privileges required');
           return;
         }
@@ -559,7 +559,7 @@ const Dashboard = () => {
           className="mb-8"
         >
           <h1 className="text-3xl sm:text-4xl font-extrabold text-[#111827] dark:text-[#F9FAFB] tracking-tight mb-2 font-headline">
-            Admin Dashboard
+            {isChiefAdmin ? 'Chief Admin Dashboard' : 'Admin Dashboard'}
           </h1>
           <p className="text-sm sm:text-base text-[#4B5563] dark:text-[#9CA3AF]">
             Manage electrical complaints, assign technicians, and monitor maintenance analytics
@@ -590,26 +590,28 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* Super Admin Action Controls */}
-            {isSuperAdmin && (
+            {/* Chief Admin & Super Admin Action Controls */}
+            {(isChiefAdmin || isSuperAdmin) && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowCreateAdminModal(true)}
-                  title="Create Normal Administrator Account"
-                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition-all text-xs font-semibold shadow-xs"
+                  title="Create Admin, Chief Admin, or Moderator Account"
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition-all text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>+ Create Admin</span>
+                  <span>+ Create Account</span>
                 </button>
 
-                <button
-                  onClick={() => setShowSuperAdminModal(true)}
-                  title="Super Admin Security & License Management"
-                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all text-xs font-semibold shadow-xs"
-                >
-                  <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span>System Security &amp; License</span>
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setShowSuperAdminModal(true)}
+                    title="Super Admin Security & License Management"
+                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all text-xs font-semibold shadow-xs cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span>System Security &amp; License</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -907,6 +909,7 @@ const Dashboard = () => {
               
                 {/* Category */}
                 <select
+                  value={filters.category}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
                 >
@@ -914,9 +917,6 @@ const Dashboard = () => {
                   <option value="Electrical Complaint">Electrical Complaint</option>
                   <option value="Power Supply / Wiring">Power Supply / Wiring</option>
                   <option value="Lighting / Fan / Appliance">Lighting / Fan / Appliance</option>
-                  <option value="Computer Complaint">Computer Complaint</option>
-                  <option value="CCTV Complaint">CCTV Complaint</option>
-                  <option value="Network Complaint">Network Complaint</option>
                   <option value="Others">Others</option>
                 </select>
               

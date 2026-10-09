@@ -43,6 +43,15 @@ export interface ComplaintNotes {
   adminToUser: ComplaintNote[];
 }
 
+export const COMPLAINT_CATEGORIES = [
+  'Electrical Complaint',
+  'Power Supply / Wiring',
+  'Lighting / Fan / Appliance',
+  'Others',
+] as const;
+
+export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number] | string;
+
 export interface Complaint {
   id?: string;
   ticketId?: string;
@@ -52,7 +61,7 @@ export interface Complaint {
   employeeId: string;
   department: string;
   designation: string;
-  category?: 'Electrical Complaint' | 'Power Supply / Wiring' | 'Lighting / Fan / Appliance' | 'Computer Complaint' | 'CCTV Complaint' | 'Network Complaint' | 'Others' | string;
+  category?: ComplaintCategory;
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high';

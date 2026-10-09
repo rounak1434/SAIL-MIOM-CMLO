@@ -3,9 +3,12 @@
  * ============================================================
  */
 
-import { collection, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { db, auth } from './firebase';
+import { db, auth, firebaseConfig } from './firebase';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
+import { AppRole } from './auth.service';
 
 export interface UserData {
   uid: string;
@@ -13,7 +16,7 @@ export interface UserData {
   email?: string;
   name?: string;
   displayName?: string;
-  role?: 'admin' | 'moderator' | 'user';
+  role?: AppRole;
   businessName?: string;
   phone?: string;
   blocked?: boolean;
@@ -83,7 +86,7 @@ export const updateUserData = async (
     businessName?: string;
     email?: string;
     phone?: string;
-    role?: 'admin' | 'moderator' | 'user';
+    role?: AppRole;
     blocked?: boolean;
     isActive?: boolean;
   }
@@ -121,4 +124,88 @@ export const getAllUsers = async (): Promise<UserData[]> => {
       profilePhotoUrl: data.profilePhotoUrl || null,
     };
   });
+};
+
+export interface CreateAccountParams {
+  name: string;
+  email: string;
+  password: string;
+  role: AppRole;
+  designation?: string;
+  businessName?: string;
+  phone?: string;
+}
+
+/**
+ * Create a privileged account (Admin, Chief Admin, or Moderator)
+ * Uses secondary Firebase Auth instance to avoid disrupting active session
+ */
+export const createPrivilegedAccount = async (
+  params: CreateAccountParams
+): Promise<{ uid: string; email: string; name: string; role: AppRole }> => {
+  const cleanName = params.name.trim();
+  const cleanEmail = params.email.trim().toLowerCase();
+  const cleanPassword = params.password.trim();
+  const cleanDesignation = params.designation?.trim() || '';
+  const cleanPhone = params.phone?.trim() || '';
+  const role = params.role || 'admin';
+
+  if (!cleanName || !cleanEmail || !cleanPassword) {
+    throw new Error('Name, email, and password are required');
+  }
+  if (cleanPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters');
+  }
+
+  const secondaryAppName = `SecondaryCreatorApp_${Date.now()}`;
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    const userCredential = await createUserWithEmailAndPassword(
+      secondaryAuth,
+      cleanEmail,
+      cleanPassword
+    );
+    const newUid = userCredential.user.uid;
+
+    await updateProfile(userCredential.user, {
+      displayName: cleanName,
+    });
+
+    await signOut(secondaryAuth);
+
+    await setDoc(doc(db, 'users', newUid), {
+      uid: newUid,
+      email: cleanEmail,
+      name: cleanName,
+      displayName: cleanName,
+      role: role,
+      designation: cleanDesignation,
+      businessName:
+        params.businessName?.trim() ||
+        cleanDesignation ||
+        (role === 'moderator' ? 'Electrical Department' : ''),
+      phone: cleanPhone,
+      blocked: false,
+      isActive: true,
+      commentCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return {
+      uid: newUid,
+      email: cleanEmail,
+      name: cleanName,
+      role,
+    };
+  } finally {
+    try {
+      const { deleteApp } = await import('firebase/app');
+      await deleteApp(secondaryApp);
+    } catch {
+      // Ignore cleanup error
+    }
+  }
 };

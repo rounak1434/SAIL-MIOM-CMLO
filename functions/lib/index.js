@@ -30,30 +30,116 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.assignSuperAdmin = exports.updateLicenseStatus = exports.updateUserData = exports.toggleUserActive = exports.toggleUserBlock = exports.updateUserPassword = exports.deleteUser = exports.setUserRole = exports.createModerator = void 0;
+exports.assignSuperAdmin = exports.updateLicenseStatus = exports.updateUserData = exports.toggleUserActive = exports.toggleUserBlock = exports.updateUserPassword = exports.deleteUser = exports.setUserRole = exports.createModerator = exports.createPrivilegedUser = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin SDK
 admin.initializeApp();
 /**
- * Helper function to verify that the caller is an authenticated admin.
+ * Helper function to verify that the caller is an authenticated admin or chief admin.
  */
 const verifyAdmin = async (context) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated to perform this action');
     }
     // 1. Check custom claim first
-    if (((_a = context.auth.token) === null || _a === void 0 ? void 0 : _a.role) === 'admin') {
+    const claimRole = (_a = context.auth.token) === null || _a === void 0 ? void 0 : _a.role;
+    if (claimRole === 'admin' ||
+        claimRole === 'chief_admin' ||
+        claimRole === 'CHIEF_ADMIN' ||
+        ((_b = context.auth.token) === null || _b === void 0 ? void 0 : _b.superAdmin) === true) {
         return true;
     }
     // 2. Check Firestore user document as fallback
     const userDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
-    if (!userDoc.exists || ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.role) !== 'admin' || ((_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.blocked) === true) {
+    const docRole = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    if (!userDoc.exists ||
+        !['admin', 'chief_admin', 'CHIEF_ADMIN'].includes(docRole) ||
+        ((_d = userDoc.data()) === null || _d === void 0 ? void 0 : _d.blocked) === true ||
+        ((_e = userDoc.data()) === null || _e === void 0 ? void 0 : _e.isActive) === false) {
         throw new functions.https.HttpsError('permission-denied', 'Only active administrator accounts can perform this action');
     }
     return true;
 };
+/**
+ * Helper function to verify that the caller is an authenticated Chief Admin or Super Admin.
+ */
+const verifyChiefAdmin = async (context) => {
+    var _a, _b, _c, _d, _e;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated to perform this action');
+    }
+    // 1. Check custom claim first
+    const claimRole = (_a = context.auth.token) === null || _a === void 0 ? void 0 : _a.role;
+    if (claimRole === 'chief_admin' ||
+        claimRole === 'CHIEF_ADMIN' ||
+        ((_b = context.auth.token) === null || _b === void 0 ? void 0 : _b.superAdmin) === true) {
+        return true;
+    }
+    // 2. Check Firestore user document as fallback
+    const userDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+    const docRole = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    if (!userDoc.exists ||
+        !['chief_admin', 'CHIEF_ADMIN'].includes(docRole) ||
+        ((_d = userDoc.data()) === null || _d === void 0 ? void 0 : _d.blocked) === true ||
+        ((_e = userDoc.data()) === null || _e === void 0 ? void 0 : _e.isActive) === false) {
+        throw new functions.https.HttpsError('permission-denied', 'Chief Admin privileges required to perform this action');
+    }
+    return true;
+};
+/**
+ * Cloud Function: Create Privileged Account (Chief Admin Exclusive)
+ * Creates user in Firebase Auth, assigns role custom claim, and creates Firestore profile.
+ * Allowed roles: admin, chief_admin, moderator
+ */
+exports.createPrivilegedUser = functions.https.onCall(async (data, context) => {
+    await verifyChiefAdmin(context);
+    const { email, password, name, role, businessName, designation, phone } = data;
+    const validRoles = ['admin', 'chief_admin', 'CHIEF_ADMIN', 'moderator'];
+    const normalizedRole = (role || 'admin').toLowerCase();
+    if (!email || !password || !name) {
+        throw new functions.https.HttpsError('invalid-argument', 'Email, password, and name are required');
+    }
+    if (!validRoles.includes(role)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Role must be admin, chief_admin, or moderator');
+    }
+    try {
+        const userRecord = await admin.auth().createUser({
+            email: email.trim().toLowerCase(),
+            password: password.trim(),
+            displayName: name.trim(),
+        });
+        await admin.auth().setCustomUserClaims(userRecord.uid, {
+            role: normalizedRole,
+        });
+        await admin.firestore().collection('users').doc(userRecord.uid).set({
+            uid: userRecord.uid,
+            email: email.trim().toLowerCase(),
+            name: name.trim(),
+            displayName: name.trim(),
+            role: normalizedRole,
+            designation: designation || businessName || '',
+            businessName: businessName || designation || (normalizedRole === 'moderator' ? 'Electrical Department' : ''),
+            phone: phone || '',
+            blocked: false,
+            isActive: true,
+            commentCount: 0,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+            success: true,
+            uid: userRecord.uid,
+            role: normalizedRole,
+            message: `${normalizedRole === 'chief_admin' ? 'Chief Admin' : normalizedRole === 'admin' ? 'Admin' : 'Moderator'} ${email} created successfully`,
+        };
+    }
+    catch (error) {
+        console.error('Error creating privileged user:', error);
+        throw new functions.https.HttpsError('internal', error.message || 'Failed to create privileged user');
+    }
+});
 /**
  * Cloud Function: Create Moderator Account
  * Creates user in Firebase Auth, assigns 'moderator' custom claim, and creates Firestore profile.
@@ -81,13 +167,14 @@ exports.createModerator = functions.https.onCall(async (data, context) => {
             email: email.trim().toLowerCase(),
             name: name.trim(),
             displayName: name.trim(),
-            businessName: businessName || 'IT Department',
+            businessName: businessName || 'Electrical Department',
             phone: phone || '',
             role: 'moderator',
             blocked: false,
             isActive: true,
             commentCount: 0,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return {
             success: true,
@@ -104,20 +191,28 @@ exports.createModerator = functions.https.onCall(async (data, context) => {
  * Cloud Function: Set User Role & Custom Claims
  */
 exports.setUserRole = functions.https.onCall(async (data, context) => {
-    await verifyAdmin(context);
     const { uid, role } = data;
-    if (!uid || !['admin', 'moderator', 'user'].includes(role)) {
+    const allowedRoles = ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'];
+    if (!uid || !allowedRoles.includes(role)) {
         throw new functions.https.HttpsError('invalid-argument', 'Valid UID and role are required');
     }
+    // Granting chief_admin or admin requires Chief Admin permissions
+    if (['chief_admin', 'CHIEF_ADMIN', 'admin'].includes(role)) {
+        await verifyChiefAdmin(context);
+    }
+    else {
+        await verifyAdmin(context);
+    }
+    const normalizedRole = role.toLowerCase();
     try {
         // Set custom claim in Firebase Auth
-        await admin.auth().setCustomUserClaims(uid, { role });
+        await admin.auth().setCustomUserClaims(uid, { role: normalizedRole });
         // Sync Firestore document
         await admin.firestore().collection('users').doc(uid).update({
-            role,
+            role: normalizedRole,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        return { success: true, message: `Role updated to ${role}` };
+        return { success: true, message: `Role updated to ${normalizedRole}` };
     }
     catch (error) {
         console.error('Error setting user role:', error);
@@ -243,10 +338,14 @@ exports.updateUserData = functions.https.onCall(async (data, context) => {
     if (!uid || !updates) {
         throw new functions.https.HttpsError('invalid-argument', 'UID and updates are required');
     }
+    // Escalating role to admin or chief_admin strictly requires Chief Admin permissions
+    if (updates.role && ['chief_admin', 'CHIEF_ADMIN', 'admin'].includes(updates.role)) {
+        await verifyChiefAdmin(context);
+    }
     try {
         // If role changed, update Auth custom claim too
         if (updates.role) {
-            await admin.auth().setCustomUserClaims(uid, { role: updates.role });
+            await admin.auth().setCustomUserClaims(uid, { role: updates.role.toLowerCase() });
         }
         await admin.firestore().collection('users').doc(uid).update(Object.assign(Object.assign({}, updates), { updatedAt: admin.firestore.FieldValue.serverTimestamp() }));
         return { success: true, message: 'User data updated successfully' };

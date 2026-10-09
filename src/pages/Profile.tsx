@@ -182,8 +182,8 @@ const Profile = () => {
     }
   };
 
-  // Only allow admin and moderator users to view this
-  if (userRole !== 'admin' && userRole !== 'moderator') {
+  // Only allow admin, chief_admin, and moderator users to view this
+  if (userRole !== 'admin' && userRole !== 'chief_admin' && userRole !== 'moderator') {
     return (
       <div className="min-h-screen pt-24 pb-12 px-4 flex items-center justify-center">
         <div className="bg-white dark:bg-[#181B21] border border-[#E5E7EB] dark:border-[#2B313B] rounded-2xl shadow-xs p-8 text-center max-w-md w-full">
@@ -257,8 +257,12 @@ const Profile = () => {
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
                     {userName}
                   </h2>
-                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30 uppercase tracking-wider">
-                    {userRole}
+                  <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                    userRole === 'chief_admin'
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30'
+                  }`}>
+                    {userRole === 'chief_admin' ? 'Chief Admin' : userRole === 'admin' ? 'Admin' : userRole === 'moderator' ? 'Moderator' : userRole}
                   </span>
                 </div>
               </div>

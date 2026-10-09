@@ -71,7 +71,7 @@ export class AdminService {
       businessName?: string;
       email?: string;
       phone?: string;
-      role?: 'admin' | 'moderator' | 'user';
+      role?: 'chief_admin' | 'admin' | 'moderator' | 'user';
     }
   ): Promise<{ success: boolean; message: string }> {
     const existing = await prisma.user.findUnique({
@@ -98,6 +98,50 @@ export class AdminService {
     return {
       success: true,
       message: 'User updated successfully',
+    };
+  }
+
+  public static async createPrivilegedUser(data: {
+    name: string;
+    email: string;
+    password: string;
+    role: 'admin' | 'chief_admin' | 'moderator';
+    businessName?: string;
+    phone?: string;
+  }): Promise<{ uid: string; email: string; name: string; role: string }> {
+    const email = data.email.trim().toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new AppError('Email already in use', 409);
+    }
+
+    if (data.password.trim().length < 6) {
+      throw new AppError('Password must be at least 6 characters long', 400);
+    }
+
+    const passwordHash = await bcrypt.hash(data.password.trim(), 10);
+    const displayName = data.name.trim();
+
+    const created = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: data.role,
+        name: displayName,
+        displayName,
+        businessName: data.businessName?.trim() || (data.role === 'moderator' ? 'Electrical Department' : null),
+        phone: data.phone ? normalizePhoneNumber(data.phone) : null,
+        blocked: false,
+        isActive: true,
+        commentCount: 0,
+      },
+    });
+
+    return {
+      uid: created.uid,
+      email: created.email,
+      name: created.name,
+      role: created.role,
     };
   }
 }

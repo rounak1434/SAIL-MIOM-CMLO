@@ -12,14 +12,45 @@ const passwordSchema = z.object({
   newPassword: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
+const createUserSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  role: z.enum(['admin', 'chief_admin', 'moderator']),
+  businessName: z.string().optional(),
+  phone: z.string().optional(),
+});
+
 const updateUserSchema = z.object({
   name: z.string().optional(),
   displayName: z.string().optional(),
   businessName: z.string().optional(),
   email: z.string().email().optional(),
   phone: z.string().optional(),
-  role: z.enum(['admin', 'moderator', 'user']).optional(),
+  role: z.enum(['chief_admin', 'admin', 'moderator', 'user']).optional(),
 });
+
+// Create privileged user (Chief Admin can create admin, chief_admin, moderator; Admin can only create moderator)
+adminRouter.post(
+  '/users',
+  validateBody(createUserSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const targetRole = req.body.role;
+      if (targetRole === 'admin' || targetRole === 'chief_admin') {
+        if (req.user?.role !== 'chief_admin') {
+          res.status(403).json({ error: 'Only Chief Admins can create Admin or Chief Admin accounts' });
+          return;
+        }
+      }
+
+      const user = await AdminService.createPrivilegedUser(req.body);
+      res.status(201).json({ success: true, user });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // Delete user permanently
 adminRouter.delete(
@@ -57,6 +88,13 @@ adminRouter.patch(
   validateBody(updateUserSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (req.body.role && (req.body.role === 'admin' || req.body.role === 'chief_admin')) {
+        if (req.user?.role !== 'chief_admin') {
+          res.status(403).json({ error: 'Only Chief Admins can assign Admin or Chief Admin roles' });
+          return;
+        }
+      }
+
       const result = await AdminService.updateUserData(
         req.params.uid,
         req.body

@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "setup-admin": "node scripts/setupInitialAdmin.mjs",
+    "create-chief-admin": "node scripts/createChiefAdmin.mjs",
     "test": "node tests/licenseSystem.test.mjs"
   },
   "dependencies": {

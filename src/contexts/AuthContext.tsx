@@ -11,9 +11,11 @@ import { onAuthStateChanged, signOut, getIdTokenResult, User as FirebaseUser } f
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
+import { AppRole } from '../services/auth.service';
+
 export interface UserData {
   email: string;
-  role: 'admin' | 'moderator' | 'user';
+  role: AppRole;
   superAdmin?: boolean;
   name?: string;
   displayName?: string;
@@ -29,8 +31,10 @@ export interface UserData {
 
 interface AuthContextType {
   currentUser: { uid: string; email: string | null; displayName: string | null } | null;
-  userRole: 'admin' | 'moderator' | 'user' | null;
+  userRole: AppRole | null;
   isSuperAdmin: boolean;
+  isChiefAdmin: boolean;
+  isAdmin: boolean;
   userName: string;
   userData: UserData | null;
   loading: boolean;
@@ -43,6 +47,8 @@ const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userRole: null,
   isSuperAdmin: false,
+  isChiefAdmin: false,
+  isAdmin: false,
   userName: '',
   userData: null,
   loading: true,
@@ -55,8 +61,10 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AuthContextType['currentUser']>(null);
-  const [userRole, setUserRole] = useState<'admin' | 'moderator' | 'user' | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [isChiefAdmin, setIsChiefAdmin] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,17 +76,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setCurrentUser(null);
       setUserRole(null);
       setIsSuperAdmin(false);
+      setIsChiefAdmin(false);
+      setIsAdmin(false);
       setUserName('');
       setUserData(null);
       setIsBlocked(false);
       return;
     }
 
-    // Role resolution: Custom Claims role is prioritized, with docData fallback
-    const resolvedRole: 'admin' | 'moderator' | 'user' =
-      claimsRole === 'admin' || claimsRole === 'moderator'
-        ? claimsRole
-        : (docData.role as 'admin' | 'moderator' | 'user') || 'user';
+    // Role resolution: Authoritative resolution between Custom Claims and Firestore user document
+    const normClaim = (claimsRole || '').toLowerCase();
+    const normDoc = (docData.role || '').toLowerCase();
+
+    // If either custom claims or verified Firestore document has chief_admin, resolve as chief_admin
+    const resolvedRole: AppRole =
+      normClaim === 'chief_admin' || normDoc === 'chief_admin'
+        ? 'chief_admin'
+        : normClaim === 'admin' || normDoc === 'admin'
+        ? 'admin'
+        : normClaim === 'moderator' || normDoc === 'moderator'
+        ? 'moderator'
+        : 'user';
 
     const blocked = docData.blocked === true;
     const isActive = docData.isActive !== false;
@@ -90,6 +108,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       signOut(auth);
       setCurrentUser(null);
       setUserRole(null);
+      setIsSuperAdmin(false);
+      setIsChiefAdmin(false);
+      setIsAdmin(false);
       setUserName('');
       setUserData(null);
       return;
@@ -98,6 +119,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Authoritative check: ONLY the Firebase Auth custom claim grants Super Admin privileges.
     // Firestore user document fields must NEVER grant Super Admin privileges.
     const isSuperAdminAuthorized = claimsSuperAdmin === true;
+    const isChiefAdminAuthorized = resolvedRole === 'chief_admin' || isSuperAdminAuthorized;
+    const isAdminAuthorized = resolvedRole === 'admin' || resolvedRole === 'chief_admin' || isSuperAdminAuthorized;
 
     const displayName = docData.displayName || docData.name || fbUser.displayName || fbUser.email?.split('@')[0] || 'User';
 
@@ -108,6 +131,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     setUserRole(resolvedRole);
     setIsSuperAdmin(isSuperAdminAuthorized);
+    setIsChiefAdmin(isChiefAdminAuthorized);
+    setIsAdmin(isAdminAuthorized);
     setUserName(displayName);
     setUserData({
       email: fbUser.email || docData.email || '',
@@ -201,6 +226,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     currentUser,
     userRole,
     isSuperAdmin,
+    isChiefAdmin,
+    isAdmin,
     userName,
     userData,
     loading,

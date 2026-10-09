@@ -20,9 +20,9 @@ const createComplaintSchema = z.object({
   department: z.string().min(1, 'Department is required'),
   designation: z.string().min(1, 'Designation is required'),
   category: z.enum([
-    'Computer Complaint',
-    'CCTV Complaint',
-    'Network Complaint',
+    'Electrical Complaint',
+    'Power Supply / Wiring',
+    'Lighting / Fan / Appliance',
     'Others',
   ]),
   title: z.string().min(1, 'Title is required'),

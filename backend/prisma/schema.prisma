@@ -11,7 +11,7 @@ model User {
   uid          String    @id @default(cuid())
   email        String    @unique
   passwordHash String
-  role         String    @default("user") // "admin" | "moderator" | "user"
+  role         String    @default("user") // "chief_admin" | "admin" | "moderator" | "user"
   name         String
   displayName  String
   businessName String?
@@ -37,7 +37,7 @@ model Complaint {
   employeeId     String
   department     String
   designation    String
-  category       String // "Computer Complaint" | "CCTV Complaint" | "Network Complaint" | "Others"
+  category       String // "Electrical Complaint" | "Power Supply / Wiring" | "Lighting / Fan / Appliance" | "Others"
   title          String
   description    String
   priority       String          @default("medium") // "low" | "medium" | "high"

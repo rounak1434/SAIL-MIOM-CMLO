@@ -31,12 +31,10 @@ function RouteFallback() {
 
 function App() {
   const [license, setLicense] = useState<ServiceLicense | null>(null);
-  const [serverOffsetMs, setServerOffsetMs] = useState<number>(0);
 
   useEffect(() => {
-    const unsubscribe = subscribeToLicense((status, offset) => {
+    const unsubscribe = subscribeToLicense((status) => {
       setLicense(status);
-      setServerOffsetMs(offset);
     });
     return () => unsubscribe();
   }, []);
@@ -73,7 +71,7 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
-          <LockOverlay license={license} serverOffsetMs={serverOffsetMs} />
+          <LockOverlay license={license} />
           {/* Global Theme Wrapper */}
           <div className="min-h-screen bg-[#F5F7FF] dark:bg-[#0F1115] text-[#111827] dark:text-[#F9FAFB] font-body relative overflow-x-hidden transition-colors duration-150">
             <Navbar />

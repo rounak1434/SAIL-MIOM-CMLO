@@ -11,6 +11,7 @@ import {
   Zap,
   UserPlus,
   Shield,
+  ShieldAlert,
   Copy,
   Check,
   Eye,
@@ -33,7 +34,6 @@ interface SuperAdminLicenseModalProps {
 export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ isOpen, onClose }) => {
   const { isSuperAdmin, currentUser } = useAuth();
   const [license, setLicense] = useState<ServiceLicense | null>(null);
-  const [serverOffsetMs, setServerOffsetMs] = useState<number>(0);
   
   // Action states
   const [isProcessing, setIsProcessing] = useState(false);
@@ -112,9 +112,8 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   // Subscribe to real-time license updates
   useEffect(() => {
     if (!isOpen) return;
-    const unsubscribe = subscribeToLicense((status, offset) => {
+    const unsubscribe = subscribeToLicense((status) => {
       setLicense(status);
-      setServerOffsetMs(offset);
       if (status?.expiresAt) {
         const d = new Date(getMillisFromTimestamp(status.expiresAt));
         // Format for datetime-local input: YYYY-MM-DDTHH:mm
@@ -128,8 +127,8 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
 
   if (!isOpen || !isSuperAdmin) return null;
 
-  const effectiveNow = Date.now() + serverOffsetMs;
-  const isExpired = isLicenseExpired(license, effectiveNow);
+  const now = Date.now();
+  const isExpired = isLicenseExpired(license, now);
 
   // Common wrapper for license update operations
   const executeUpdate = async (params: {
@@ -162,7 +161,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   // Action 1: Extend expiration by N days
   const handleExtendDays = (days: number) => {
     const currentExpiryMillis = getMillisFromTimestamp(license?.expiresAt);
-    const base = currentExpiryMillis > effectiveNow ? currentExpiryMillis : effectiveNow;
+    const base = currentExpiryMillis > Date.now() ? currentExpiryMillis : Date.now();
     const newExpiry = new Date(base + days * 24 * 60 * 60 * 1000);
     executeUpdate({
       enabled: true,
@@ -181,7 +180,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
       setStatusMessage({ type: 'error', text: 'Invalid date/time selected.' });
       return;
     }
-    const isPast = parsed.getTime() <= effectiveNow;
+    const isPast = parsed.getTime() <= Date.now();
     executeUpdate({
       enabled: true,
       expiresAt: parsed,
@@ -195,7 +194,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
     // Sets expiresAt to past time (now - 1 second) and enabled: true
     executeUpdate({
       enabled: true,
-      expiresAt: new Date(effectiveNow - 1000),
+      expiresAt: new Date(Date.now() - 1000),
       reason: 'Immediate manual lock engaged by Super Admin',
       successMsg: 'Immediate lock engaged. Service is now restricted.'
     });
@@ -205,7 +204,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   const handleEmergencyUnlock = () => {
     executeUpdate({
       enabled: true,
-      expiresAt: new Date(effectiveNow + 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       reason: 'Emergency unlock: 24-hour temporary service extension',
       successMsg: 'Emergency unlock applied: Service extended for 24 hours.'
     });
@@ -215,7 +214,7 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   const handleToggleLimit = (targetEnabled: boolean) => {
     const currentExpiry = license?.expiresAt 
       ? new Date(getMillisFromTimestamp(license.expiresAt)) 
-      : new Date(effectiveNow + 365 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
     executeUpdate({
       enabled: targetEnabled,
@@ -286,13 +285,27 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
             <span className="text-slate-600 dark:text-slate-400 font-medium">Service Access Status</span>
             <span className={`inline-flex items-center gap-1.5 font-semibold px-2.5 py-1 rounded-full border ${
               isExpired
-                ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
                 : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
             }`}>
               <Radio className="w-3 h-3 animate-pulse" />
-              {isExpired ? 'LOCKED / EXPIRED' : 'ACTIVE & UNLOCKED'}
+              {isExpired ? 'LOCKED (Super Admin Bypass Active)' : 'ACTIVE & UNLOCKED'}
             </span>
           </div>
+
+          {isExpired ? (
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 flex items-start gap-2 text-[11px] leading-relaxed">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div>
+                <span className="font-semibold">Super Admin Bypass Active:</span> Public portal access, complaint submission, tracking, and standard staff dashboards (Admins &amp; Moderators) are currently restricted by license expiration. Super Admin administrative access remains active via authoritative custom claim to enable renewal and maintenance.
+              </div>
+            </div>
+          ) : (
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center gap-2 text-[11px]">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>Public and staff portal operations are normal and fully active.</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800/80 pt-2">
             <span className="text-slate-600 dark:text-slate-400">License Limit Enforcement:</span>
@@ -312,6 +325,19 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
               <span className="text-slate-800 dark:text-slate-300 font-mono">{license.updatedBy}</span>
             </div>
           )}
+        </div>
+
+        {/* Security Scope & Boundary Distinction */}
+        <div className="p-3 bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl mb-5 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+          <div className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5 text-blue-500" />
+            <span>Scope Distinction &amp; Boundary Rules:</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 pl-0.5 text-[10.5px]">
+            <li><strong>System License Lock:</strong> Governs platform-wide service availability. When expired, complaints and non-Super-Admin dashboards are restricted.</li>
+            <li><strong>Account Deactivation &amp; Blocking:</strong> Managed individually in User Management; restricts individual accounts regardless of license state.</li>
+            <li><strong>24-Hour Complaint Limit:</strong> Rate limits duplicate citizen complaints per phone number within 24 hours, operating independently of license status.</li>
+          </ul>
         </div>
 
         {/* Control Actions */}

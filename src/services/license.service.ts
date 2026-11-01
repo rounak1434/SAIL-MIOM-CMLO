@@ -77,34 +77,18 @@ export function isLicenseExpired(
 
 /**
  * Subscribes to real-time updates of the system license configuration.
- * Also computes approximate server clock skew from doc snapshot readTime/updateTime.
+ * Uses client-side evaluation without inventing an artificial server offset from stale updatedAt.
+ * Firestore Security Rules provide authoritative server-time enforcement.
  */
 export function subscribeToLicense(
-  callback: (license: ServiceLicense | null, serverOffsetMs: number) => void
+  callback: (license: ServiceLicense | null) => void
 ): () => void {
   return onSnapshot(
     LICENSE_DOC_REF,
     (snapshot) => {
-      let serverOffsetMs = 0;
       if (snapshot.exists()) {
         const data = snapshot.data() as ServiceLicense;
-        
-        // Estimate clock offset between client local clock and server timestamp
-        if (data.updatedAt) {
-          const serverUpdateMillis = getMillisFromTimestamp(data.updatedAt);
-          // If the update was very recent or we have snapshot metadata
-          if (serverUpdateMillis > 0) {
-            // Skew is capped to avoid wild jumps from old docs
-            const clientNow = Date.now();
-            const diff = serverUpdateMillis - clientNow;
-            // Only consider reasonable skews within +/- 24 hours
-            if (Math.abs(diff) < 86400000) {
-              serverOffsetMs = diff;
-            }
-          }
-        }
-        
-        callback(data, serverOffsetMs);
+        callback(data);
       } else {
         // Default unlocked license configuration if document does not exist yet
         callback({
@@ -112,13 +96,13 @@ export function subscribeToLicense(
           expiresAt: null,
           updatedAt: null,
           updatedBy: 'system'
-        }, 0);
+        });
       }
     },
     (error) => {
       console.error('Error listening to system license:', error);
       // Fallback to unlocked on listener error to maintain client availability
-      callback(null, 0);
+      callback(null);
     }
   );
 }

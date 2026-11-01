@@ -25,15 +25,14 @@ import {
 
 interface LockOverlayProps {
   license: ServiceLicense | null;
-  serverOffsetMs?: number;
 }
 
-export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetMs = 0 }) => {
+export const LockOverlay: React.FC<LockOverlayProps> = ({ license }) => {
   const { isSuperAdmin, currentUser } = useAuth();
   
   // State tracking whether the license is expired right now
   const [isExpired, setIsExpired] = useState<boolean>(() => {
-    return isLicenseExpired(license, Date.now() + serverOffsetMs);
+    return isLicenseExpired(license, Date.now());
   });
 
   // Discreet modal trigger states
@@ -58,33 +57,56 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
   const [actionError, setActionError] = useState<string | null>(null);
 
   // =========================================================================
-  // REAL-TIME AUTOMATIC EXPIRATION TIMER (Zero Polling)
-  // Calculates exact delay until expiresAt and schedules a single precision timer.
+  // REAL-TIME AUTOMATIC EXPIRATION TIMER
+  // Schedules bounded timer intervals (<= 24h chunks) to handle arbitrarily
+  // long future dates safely without 32-bit setTimeout integer overflow.
+  // Re-evaluates immediately on visibility changes, window focus, and license snapshot updates.
   // =========================================================================
   useEffect(() => {
-    const checkState = () => {
-      const now = Date.now() + serverOffsetMs;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+
+    const scheduleCheck = () => {
+      const now = Date.now();
       const expired = isLicenseExpired(license, now);
       setIsExpired(expired);
-      return { now, expired };
+
+      // If license is enabled and not yet expired, calculate remaining time
+      if (license?.enabled && license?.expiresAt && !expired) {
+        const expireMillis = getMillisFromTimestamp(license.expiresAt);
+        const remaining = expireMillis - now;
+
+        if (remaining <= 0) {
+          setIsExpired(true);
+        } else {
+          // 32-bit signed integer limit for setTimeout is 2147483647 ms (~24.8 days).
+          // Bound wait intervals to at most 24 hours (86,400,000 ms) so arbitrarily long
+          // expirations (>24.8 days) advance chunk-by-chunk without overflow.
+          const MAX_CHUNK_MS = 24 * 60 * 60 * 1000; // 24 hours
+          const nextDelay = Math.min(remaining + 50, MAX_CHUNK_MS);
+
+          timerId = setTimeout(() => {
+            scheduleCheck();
+          }, nextDelay);
+        }
+      }
     };
 
-    const { now, expired } = checkState();
+    scheduleCheck();
 
-    // If license is enabled and not yet expired, calculate exact milliseconds until expiration
-    if (license?.enabled && license?.expiresAt && !expired) {
-      const expireMillis = getMillisFromTimestamp(license.expiresAt);
-      const delay = expireMillis - now;
+    // Re-evaluate whenever the tab wakes up, regains visibility, or window receives focus
+    const handleVisibilityOrFocus = () => {
+      scheduleCheck();
+    };
 
-      if (delay > 0 && delay <= 2147483647) { // within 32-bit setTimeout limit (~24.8 days)
-        const timerId = setTimeout(() => {
-          setIsExpired(true);
-        }, delay + 50); // slight buffer to ensure currentTime >= expiresAt
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
-        return () => clearTimeout(timerId);
-      }
-    }
-  }, [license, serverOffsetMs]);
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [license]);
 
   // Keyboard shortcut listener (Ctrl + Shift + L)
   useEffect(() => {

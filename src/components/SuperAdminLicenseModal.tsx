@@ -7,24 +7,16 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   X, 
-  Loader2, 
-  Calendar,
-  Clock,
   Radio,
   Zap,
   UserPlus,
   Shield,
-  Terminal,
   Copy,
   Check,
   Eye,
   EyeOff
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, firebaseConfig } from '../services/firebase';
 import { 
   subscribeToLicense, 
   updateServiceLicense, 
@@ -59,98 +51,8 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
   const [adminDesignation, setAdminDesignation] = useState('');
   const [adminPhone, setAdminPhone] = useState('');
   const [adminFormError, setAdminFormError] = useState<string | null>(null);
-  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
-  const [createdAdminDirect, setCreatedAdminDirect] = useState<{ uid: string; email: string; name: string } | null>(null);
   const [generatedCommand, setGeneratedCommand] = useState<{ ps: string; bash: string } | null>(null);
   const [copiedType, setCopiedType] = useState<'ps' | 'bash' | 'cli' | null>(null);
-
-  const handleCreateAdminDirect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminFormError(null);
-    setCreatedAdminDirect(null);
-
-    const trimmedName = adminName.trim();
-    const trimmedEmail = adminEmail.trim().toLowerCase();
-    const trimmedPassword = adminPassword.trim();
-    const trimmedDesignation = adminDesignation.trim();
-    const trimmedPhone = adminPhone.trim();
-
-    if (!trimmedName) {
-      setAdminFormError('Admin Name is required.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
-      setAdminFormError('A valid Admin Email address is required.');
-      return;
-    }
-    if (!trimmedPassword || trimmedPassword.length < 6) {
-      setAdminFormError('Password must be at least 6 characters.');
-      return;
-    }
-
-    setIsCreatingAdmin(true);
-    try {
-      const secondaryAppName = 'SecondaryAdminCreatorAppModal';
-      const secondaryApp =
-        getApps().find((a) => a.name === secondaryAppName) ||
-        initializeApp(firebaseConfig, secondaryAppName);
-
-      const secondaryAuth = getAuth(secondaryApp);
-      const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        trimmedEmail,
-        trimmedPassword
-      );
-
-      const newAdminUid = userCredential.user.uid;
-
-      await updateProfile(userCredential.user, {
-        displayName: trimmedName,
-      });
-
-      await signOut(secondaryAuth);
-
-      await setDoc(doc(db, 'users', newAdminUid), {
-        uid: newAdminUid,
-        email: trimmedEmail,
-        name: trimmedName,
-        displayName: trimmedName,
-        role: 'admin',
-        designation: trimmedDesignation || '',
-        businessName: trimmedDesignation || '',
-        phone: trimmedPhone || '',
-        blocked: false,
-        isActive: true,
-        commentCount: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      setCreatedAdminDirect({
-        uid: newAdminUid,
-        email: trimmedEmail,
-        name: trimmedName,
-      });
-
-      setAdminName('');
-      setAdminEmail('');
-      setAdminPassword('');
-      setAdminDesignation('');
-      setAdminPhone('');
-    } catch (err: any) {
-      console.error('Error creating admin:', err);
-      if (err.code === 'auth/email-already-in-use') {
-        setAdminFormError('An account with this email already exists.');
-      } else if (err.code === 'auth/weak-password') {
-        setAdminFormError('Password must be at least 6 characters.');
-      } else {
-        setAdminFormError(err.message || 'Failed to create normal admin account.');
-      }
-    } finally {
-      setIsCreatingAdmin(false);
-    }
-  };
 
   const handleGenerateAdminProvisioning = (e: React.FormEvent) => {
     e.preventDefault();
@@ -623,20 +525,10 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
                   <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
-                      disabled={isCreatingAdmin}
                       className="flex-1 py-2.5 px-4 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-all flex items-center justify-center gap-2 shadow-xs"
                     >
-                      {isCreatingAdmin ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Creating Admin Account...</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="w-4 h-4" />
-                          <span>Create Admin Account</span>
-                        </>
-                      )}
+                      <UserPlus className="w-4 h-4" />
+                      <span>Create Admin Account</span>
                     </button>
                     <button
                       type="button"
@@ -648,25 +540,6 @@ export const SuperAdminLicenseModal: React.FC<SuperAdminLicenseModalProps> = ({ 
                     </button>
                   </div>
                 </form>
-
-                {/* Direct Creation Success Message */}
-                {createdAdminDirect && (
-                  <div className="mt-3 p-3.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-xl space-y-2 text-xs">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>Admin Account Created Successfully!</span>
-                    </div>
-                    <div className="p-2.5 bg-white/80 dark:bg-slate-900/80 rounded-lg space-y-1 font-mono text-[11px] text-slate-800 dark:text-slate-200">
-                      <div>Name: {createdAdminDirect.name}</div>
-                      <div>Email: {createdAdminDirect.email}</div>
-                      <div>UID: {createdAdminDirect.uid}</div>
-                      <div>Role: <span className="text-purple-600 dark:text-purple-400 font-semibold">admin</span></div>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                      The administrator can now log in directly with their email and password.
-                    </p>
-                  </div>
-                )}
 
                 {/* Generated Provisioning Details */}
                 {generatedCommand && (

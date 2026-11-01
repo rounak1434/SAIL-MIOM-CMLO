@@ -134,8 +134,12 @@ const Home = () => {
           {/* Sharp, Clear, Fully Visible Hero Image */}
           <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] max-h-[520px]">
             <img
-              src="/hero.png"
+              src="/hero.jpg"
               alt="SAIL MIOM Mining Machinery"
+              width={1024}
+              height={682}
+              fetchPriority="high"
+              decoding="async"
               className="w-full h-full object-cover object-center"
             />
           </div>
@@ -442,6 +446,7 @@ const Home = () => {
                     alt={`Slide ${index + 1}`}
                     className="w-full h-full object-cover rounded-xl"
                     loading="lazy"
+                    decoding="async"
                   />
                 </div>
               ))}

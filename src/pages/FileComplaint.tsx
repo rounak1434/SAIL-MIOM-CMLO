@@ -20,7 +20,6 @@ import {
   Zap,
   MapPin,
   Briefcase,
-  Layers,
   Wrench,
   Shield,
   Home,
@@ -42,6 +41,14 @@ const DEPARTMENTS = [
   'CC',
   'CISF',
   'KVS Teacher',
+  'Finance',
+  'Mining',
+  'Chemical Lab',
+  'Plant',
+  'E&L',
+  'Medical',
+  'Service',
+  'Survey',
   'Others',
 ] as const;
 

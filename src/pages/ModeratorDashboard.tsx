@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Clock, TrendingUp, CheckCircle, Eye, MessageSquare, Zap, FileSpreadsheet, Download } from 'lucide-react';
-import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExport';
+import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExportLoader';
 import { 
   subscribeToModeratorComplaints, 
   Complaint,

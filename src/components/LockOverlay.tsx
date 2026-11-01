@@ -10,8 +10,6 @@ import {
   Loader2,
   LogOut,
   Calendar,
-  Clock,
-  ShieldAlert,
   Mail
 } from 'lucide-react';
 import { signInWithEmailAndPassword, signOut, getIdTokenResult } from 'firebase/auth';
@@ -58,9 +56,6 @@ export const LockOverlay: React.FC<LockOverlayProps> = ({ license, serverOffsetM
   const [actionProcessing, setActionProcessing] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  // Custom extension state
-  const [extendDays, setExtendDays] = useState<number>(30);
 
   // =========================================================================
   // REAL-TIME AUTOMATIC EXPIRATION TIMER (Zero Polling)

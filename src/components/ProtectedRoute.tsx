@@ -1,7 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardSkeleton from './DashboardSkeleton';
-import { AppRole } from '../services/auth.service';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

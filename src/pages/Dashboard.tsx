@@ -5,7 +5,7 @@ import {
   Trash2, Eye, UserPlus, Mail, Phone, Building2, Lock, User, Printer, Calendar, ShieldCheck,
   FileSpreadsheet, Download
 } from 'lucide-react';
-import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExport';
+import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExportLoader';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   subscribeToAllComplaints, 
@@ -20,7 +20,6 @@ import {
 } from '../services/complaint.service';
 import { 
   createModeratorAccount, 
-  getAllModerators, 
   getActiveModerators,
   subscribeToActiveModerators,
   toggleModeratorStatus,

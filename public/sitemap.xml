@@ -5,16 +5,22 @@
 >
   <!-- Home / Landing Page -->
   <url>
-    <loc>https://complaint-management-sys-1266f.web.app/</loc>
+    <loc>https://sail-miom-elect.web.app/</loc>
     <lastmod>2026-06-07</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
 
-  <!-- Login Page -->
+  <!-- Public Complaint Pages -->
   <url>
-    <loc>https://complaint-management-sys-1266f.web.app/login</loc>
-    <lastmod>2026-06-07</lastmod>
+    <loc>https://sail-miom-elect.web.app/file-complaint</loc>
+    <lastmod>2026-11-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://sail-miom-elect.web.app/track-complaint</loc>
+    <lastmod>2026-11-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

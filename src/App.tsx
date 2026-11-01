@@ -53,6 +53,22 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    // Warm the two public routes once the page is idle so the first click is instant
+    const prefetchRoutes = () => {
+      import('./pages/FileComplaint').catch(() => {});
+      import('./pages/TrackComplaint').catch(() => {});
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(prefetchRoutes);
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timer = setTimeout(prefetchRoutes, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

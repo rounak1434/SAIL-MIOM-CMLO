@@ -12,7 +12,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  setDoc,
   updateDoc,
   deleteDoc,
   addDoc,
@@ -23,7 +22,6 @@ import {
   runTransaction,
   serverTimestamp,
   increment,
-  Timestamp,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { uploadToImgBB } from './imgbb.service';
@@ -204,7 +202,7 @@ export const fetchComplaintNotes = async (ticketId: string): Promise<ComplaintNo
  */
 export const createComplaint = async (
   complaintData: Omit<Complaint, 'id' | 'ticketId' | 'status' | 'notes' | 'createdAt'>
-): Promise<{ ticketId: string }> => {
+): Promise<{ success: boolean; ticketId: string }> => {
   const cleanEmail = complaintData.email.trim().toLowerCase();
   const cleanPhone = normalizePhoneNumber(complaintData.phone);
   const sanitizedEmail = cleanEmail.replace(/[^a-z0-9]/g, '_');

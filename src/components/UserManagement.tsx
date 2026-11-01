@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getBlockedUsers, toggleUserBlock, toggleModeratorStatus } from '../services/moderator.service';
+import { toggleUserBlock, toggleModeratorStatus } from '../services/moderator.service';
 import { sendUserPasswordReset, updateUserData, getAllUsers } from '../services/admin.service';
-import { Info, Mail, UserPlus, Shield } from 'lucide-react';
+import { Info, Mail, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { formatRoleDisplayName } from '../services/auth.service';
 import CreateAdminModal from './CreateAdminModal';

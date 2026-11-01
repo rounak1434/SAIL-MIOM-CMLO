@@ -51,7 +51,7 @@ export interface FunctionResponse {
  * On the Spark plan (without Cloud Functions), administrators should Block or Deactivate the account.
  */
 export const deleteUser = async (
-  uid: string,
+  _uid: string,
   _deleteFirestore: boolean = true
 ): Promise<FunctionResponse> => {
   throw new Error(

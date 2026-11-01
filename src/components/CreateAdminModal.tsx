@@ -8,13 +8,11 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  Building2,
   Briefcase,
   Phone,
   Mail,
   Lock,
   User,
-  ShieldCheck,
   Shield
 } from 'lucide-react';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';

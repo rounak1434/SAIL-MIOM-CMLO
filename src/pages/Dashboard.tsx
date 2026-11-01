@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   subscribeToAllComplaints, 
   subscribeToComplaintStats, 
+  subscribeToComplaintNotes, 
   Complaint,
   ComplaintStats,
   deleteComplaint,
@@ -55,6 +56,17 @@ const Dashboard = () => {
     rejected: 0
   });
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+
+  // Real-time subscription to notes for the selected complaint in modal
+  useEffect(() => {
+    if (!selectedComplaint?.id) return;
+
+    const unsubscribe = subscribeToComplaintNotes(selectedComplaint.id, (notes) => {
+      setSelectedComplaint((prev) => (prev && prev.id === selectedComplaint.id ? { ...prev, notes } : prev));
+    });
+
+    return () => unsubscribe();
+  }, [selectedComplaint?.id]);
   const [showModeratorForm, setShowModeratorForm] = useState(false);
   const [moderators, setModerators] = useState<Moderator[]>([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -227,8 +239,14 @@ const Dashboard = () => {
   const handleDeleteComplaint = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this complaint?')) {
       try {
+        // Optimistic UI update: remove immediately so page refresh is never needed
+        setComplaints((prev) => prev.filter((c) => c.id !== id));
+        if (selectedComplaint?.id === id) {
+          setSelectedComplaint(null);
+        }
         await deleteComplaint(id);
       } catch (error) {
+        console.error('Failed to delete complaint:', error);
         alert('Failed to delete complaint');
       }
     }

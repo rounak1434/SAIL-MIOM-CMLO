@@ -22,6 +22,7 @@ export interface UserData {
   businessName?: string | null;
   phone?: string | null;
   blocked?: boolean;
+  hidden?: boolean;
   commentCount?: number;
   lastReset?: any;
   createdAt?: any;
@@ -35,6 +36,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isChiefAdmin: boolean;
   isAdmin: boolean;
+  isHidden: boolean;
   userName: string;
   userData: UserData | null;
   loading: boolean;
@@ -49,6 +51,7 @@ const AuthContext = createContext<AuthContextType>({
   isSuperAdmin: false,
   isChiefAdmin: false,
   isAdmin: false,
+  isHidden: false,
   userName: '',
   userData: null,
   loading: true,
@@ -65,6 +68,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [isChiefAdmin, setIsChiefAdmin] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isHidden, setIsHidden] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,6 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsSuperAdmin(false);
       setIsChiefAdmin(false);
       setIsAdmin(false);
+      setIsHidden(false);
       setUserName('');
       setUserData(null);
       setIsBlocked(false);
@@ -121,6 +126,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const isSuperAdminAuthorized = claimsSuperAdmin === true;
     const isChiefAdminAuthorized = resolvedRole === 'chief_admin' || isSuperAdminAuthorized;
     const isAdminAuthorized = resolvedRole === 'admin' || resolvedRole === 'chief_admin' || isSuperAdminAuthorized;
+    const isAccountHidden = docData.hidden === true;
 
     const displayName = docData.displayName || docData.name || fbUser.displayName || fbUser.email?.split('@')[0] || 'User';
 
@@ -133,6 +139,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsSuperAdmin(isSuperAdminAuthorized);
     setIsChiefAdmin(isChiefAdminAuthorized);
     setIsAdmin(isAdminAuthorized);
+    setIsHidden(isAccountHidden);
     setUserName(displayName);
     setUserData({
       email: fbUser.email || docData.email || '',
@@ -143,6 +150,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       businessName: docData.businessName || null,
       phone: docData.phone || null,
       blocked: false,
+      hidden: isAccountHidden,
       commentCount: docData.commentCount || 0,
       createdAt: docData.createdAt,
       isActive: true,
@@ -228,6 +236,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isSuperAdmin,
     isChiefAdmin,
     isAdmin,
+    isHidden,
     userName,
     userData,
     loading,

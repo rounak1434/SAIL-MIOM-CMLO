@@ -12,7 +12,7 @@ service cloud.firestore {
 
     // Super Admin strictly authorized via Firebase Auth custom claim only
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.token.superAdmin == true;
+      return isAuthenticated() && ('superAdmin' in request.auth.token) && request.auth.token.superAdmin == true;
     }
 
     // Admin authorized via custom claim, Chief Admin, Super Admin, or verified Firestore admin profile
@@ -26,8 +26,10 @@ service cloud.firestore {
          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chief_admin' ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CHIEF_ADMIN') &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true)
+         (!('isActive' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false) &&
+         (!('blocked' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true))
       );
     }
 
@@ -40,16 +42,24 @@ service cloud.firestore {
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chief_admin' ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CHIEF_ADMIN') &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true)
+         (!('isActive' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false) &&
+         (!('blocked' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true))
       );
     }
 
-    // Moderator authorized via custom claim, Admin, Chief Admin, or Super Admin
+    // Moderator authorized via custom claim, Admin, Chief Admin, Super Admin, or verified Firestore moderator profile
     function isModerator() {
       return isAuthenticated() && (
         request.auth.token.role == 'moderator' ||
-        isAdmin()
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator' &&
+         (!('isActive' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false) &&
+         (!('blocked' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked != true))
       );
     }
 
@@ -62,10 +72,18 @@ service cloud.firestore {
 
     // Helper to identify Super Admin accounts across Firestore doc attributes and trusted registry
     function isSuperAdminAccount(userId) {
-      return resource.data.superAdmin == true ||
-             resource.data.role == 'super_admin' ||
+      return (('superAdmin' in resource.data) && resource.data.superAdmin == true) ||
+             (('role' in resource.data) && resource.data.role == 'super_admin') ||
              (exists(/databases/$(database)/documents/systemSettings/superAdminRegistry) &&
               userId in get(/databases/$(database)/documents/systemSettings/superAdminRegistry).data.uids);
+    }
+
+    // Helper to identify if the authenticated caller's account is marked as hidden
+    function isCallerHidden() {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             ('hidden' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.hidden == true;
     }
 
     // ============================================
@@ -75,31 +93,47 @@ service cloud.firestore {
       // GET: Direct document lookup
       // - Users can read their own profile (including Super Admin)
       // - Super Admin can read any profile
-      // - Admins & Chief Admins can read any non-Super Admin profile
-      // - Moderators can read any non-Super Admin moderator profile
+      // - Admins & Chief Admins can read any non-Super Admin, non-hidden profile
+      // - Moderators can read any non-Super Admin, non-hidden moderator profile
       allow get: if isAuthenticated() && (
         request.auth.uid == userId ||
         isSuperAdmin() ||
-        (isAdmin() && !isSuperAdminAccount(userId)) ||
-        (resource.data.role == 'moderator' && isModerator() && !isSuperAdminAccount(userId))
+        (isAdmin() && !isSuperAdminAccount(userId) && (!('hidden' in resource.data) || resource.data.hidden != true)) ||
+        (resource.data.role == 'moderator' && isModerator() && !isSuperAdminAccount(userId) && (!('hidden' in resource.data) || resource.data.hidden != true))
       );
 
       // LIST: Collection queries
       // - Super Admin can list all users directly
-      // - Authenticated staff can query moderators
-      // - General collection queries by lower roles are rejected (they must use the secure server-side getManagedUsers function)
+      // - Chief Admin can query non-hidden Chief Admin, Admin, and Moderator accounts
+      // - Admin can query non-hidden Admin and Moderator accounts
+      // - Moderator can query non-hidden Moderator accounts
       allow list: if isAuthenticated() && (
         isSuperAdmin() ||
-        (resource.data.role == 'moderator' && isModerator())
+        (isChiefAdmin() &&
+         resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator'] &&
+         (!('hidden' in resource.data) || resource.data.hidden != true) &&
+         (!('superAdmin' in resource.data) || resource.data.superAdmin != true) &&
+         resource.data.role != 'super_admin') ||
+        (isAdmin() &&
+         resource.data.role in ['admin', 'moderator'] &&
+         (!('hidden' in resource.data) || resource.data.hidden != true) &&
+         (!('superAdmin' in resource.data) || resource.data.superAdmin != true) &&
+         resource.data.role != 'super_admin') ||
+        (isModerator() &&
+         resource.data.role == 'moderator' &&
+         (!('hidden' in resource.data) || resource.data.hidden != true) &&
+         (!('superAdmin' in resource.data) || resource.data.superAdmin != true) &&
+         resource.data.role != 'super_admin')
       );
 
       // CREATE:
       // - Regular users create own profile on registration strictly with role='user'
       // - Chief Admin can create Admin, Chief Admin, and Moderator accounts
       // - Admin can create Moderator and user accounts
-      // - Lower roles can NEVER create accounts with superAdmin=true or role='super_admin'
+      // - Lower roles can NEVER create accounts with superAdmin=true, hidden=true, or role='super_admin'
       allow create: if isAuthenticated() && (
         (!('superAdmin' in request.resource.data) || request.resource.data.superAdmin == false || isSuperAdmin()) &&
+        (!('hidden' in request.resource.data) || request.resource.data.hidden == false || isSuperAdmin()) &&
         ((!('role' in request.resource.data)) || request.resource.data.role != 'super_admin' || isSuperAdmin()) &&
         (
           (request.auth.uid == userId &&
@@ -113,29 +147,38 @@ service cloud.firestore {
       );
 
       // UPDATE:
-      // - Super Admin can update any profile (and only Super Admin can touch a Super Admin account)
-      // - Chief Admin can update non-Super Admin profiles and assign roles
-      // - Admin can update non-Super Admin profiles or assign moderator/user roles
-      // - Users can update their own non-sensitive profile info only
-      // - Lower roles cannot modify or grant superAdmin status or role='super_admin'
+      // - Super Admin can toggle hidden visibility on ANY account (including self and other Super Admins),
+      //   strictly restricted to the visibility field ('hidden' and 'updatedAt')
+      // - Super Admin or authorized admins can make standard profile updates (neither hidden nor superAdmin can be changed)
+      // - Lower roles cannot modify or grant superAdmin status, hidden status, or role='super_admin'
+      // - Lower roles cannot update hidden accounts
       allow update: if isAuthenticated() && (
-        isSuperAdmin() ||
-        (!isSuperAdminAccount(userId) &&
-         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['superAdmin']) &&
-         (!('role' in request.resource.data) || request.resource.data.role != 'super_admin') && (
-           (isChiefAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'])) ||
-           (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['moderator', 'user'] || request.resource.data.role == resource.data.role)) ||
-           (request.auth.uid == userId &&
-            resource.data.blocked != true &&
-            resource.data.isActive != false &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin']))
+        // Branch 1: Super Admin toggling hidden visibility on ANY account
+        (isSuperAdmin() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasAny(['hidden']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hidden', 'updatedAt'])) ||
+
+        // Branch 2: Standard profile updates (neither hidden nor superAdmin can be changed)
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['hidden', 'superAdmin']) && (
+          isSuperAdmin() ||
+          (!isSuperAdminAccount(userId) &&
+           (!('hidden' in resource.data) || resource.data.hidden != true) &&
+           (!('role' in request.resource.data) || request.resource.data.role != 'super_admin') && (
+             (isChiefAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator', 'user'])) ||
+             (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['moderator', 'user'] || request.resource.data.role == resource.data.role)) ||
+             (request.auth.uid == userId &&
+              resource.data.blocked != true &&
+              resource.data.isActive != false &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'blocked', 'isActive', 'permissions', 'superAdmin', 'hidden']))
+           )
+          )
         ))
       );
 
       // DELETE:
       // - Super Admin can delete accounts
-      // - Admins/Chief Admins can delete non-Super Admin accounts only
-      allow delete: if isSuperAdmin() || (isAdmin() && !isSuperAdminAccount(userId));
+      // - Admins/Chief Admins can delete non-Super Admin, non-hidden accounts only
+      allow delete: if isSuperAdmin() || (isAdmin() && !isSuperAdminAccount(userId) && (!('hidden' in resource.data) || resource.data.hidden != true));
     }
 
     // ============================================
@@ -149,12 +192,34 @@ service cloud.firestore {
           'designation', 'category', 'title', 'description', 'priority', 'status', 'createdAt'
         ]) && request.resource.data.status == 'pending';
 
-      // READ: Single complaint trackable by ID; Full listing restricted to staff
-      allow get: if true;
-      allow list: if isModerator() || isAdmin();
+      // READ: Restricted strictly to authenticated authorized staff or complainant
+      // - Super Admin & Admins can read all complaints (get and list)
+      // - Moderators can read ONLY complaints assigned to their own UID (if not hidden)
+      // - Authenticated complainants can read their own complaints
+      // - Unauthenticated reads are STRICTLY DENIED (no public direct read on complaint documents)
+      allow get: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isAdmin() ||
+        (isModerator() && !isCallerHidden() && resource.data.assignedToUID == request.auth.uid) ||
+        (resource.data.uid == request.auth.uid ||
+         (('userEmail' in resource.data) && resource.data.userEmail == request.auth.token.email) ||
+         (('email' in resource.data) && resource.data.email == request.auth.token.email))
+      );
+      allow list: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isAdmin() ||
+        (isModerator() && !isCallerHidden() && resource.data.assignedToUID == request.auth.uid) ||
+        (resource.data.uid == request.auth.uid ||
+         (('userEmail' in resource.data) && resource.data.userEmail == request.auth.token.email) ||
+         (('email' in resource.data) && resource.data.email == request.auth.token.email))
+      );
 
-      // UPDATE: Restricted to authorized staff (when license is valid, or Super Admin)
-      allow update: if (!isLicenseExpired() && (isModerator() || isAdmin())) || isSuperAdmin();
+      // UPDATE: Restricted to authorized staff (when license is valid, or Super Admin; hidden moderator denied)
+      // Moderators can update ONLY complaints assigned to their own UID
+      allow update: if isSuperAdmin() || (!isLicenseExpired() && (
+        isAdmin() ||
+        (isModerator() && !isCallerHidden() && resource.data.assignedToUID == request.auth.uid)
+      ));
 
       // DELETE: Admin only
       allow delete: if isAdmin() || isSuperAdmin();
@@ -163,14 +228,25 @@ service cloud.firestore {
       // COMPLAINT NOTES SUBCOLLECTION
       // ============================================
       match /notes/{noteId} {
-        // READ: Staff can read notes; AdminToUser notes can be viewed by submitter/guest via complaint view
-        allow read: if isModerator() || isAdmin() || resource.data.noteType == 'adminToUser';
+        // READ: Authorized staff (moderator restricted to assigned complaint and not hidden); Complainant can read adminToUser notes
+        allow read: if isAuthenticated() && (
+                       isSuperAdmin() ||
+                       isAdmin() ||
+                       (isModerator() && !isCallerHidden() && get(/databases/$(database)/documents/complaints/$(complaintId)).data.assignedToUID == request.auth.uid) ||
+                       (resource.data.noteType == 'adminToUser' && (
+                         get(/databases/$(database)/documents/complaints/$(complaintId)).data.uid == request.auth.uid ||
+                         get(/databases/$(database)/documents/complaints/$(complaintId)).data.userEmail == request.auth.token.email
+                       ))
+                     );
 
-        // CREATE: Authorized staff only; Author email must match logged-in user (when license valid or Super Admin)
-        allow create: if ((!isLicenseExpired() && (isModerator() || isAdmin())) || isSuperAdmin()) &&
+        // CREATE: Authorized staff only (moderator restricted to assigned complaint and not hidden); Author email must match logged-in user (when license valid or Super Admin)
+        allow create: if isSuperAdmin() || (((!isLicenseExpired() && (
+          isAdmin() ||
+          (isModerator() && !isCallerHidden() && get(/databases/$(database)/documents/complaints/$(complaintId)).data.assignedToUID == request.auth.uid)
+        ))) &&
           request.resource.data.keys().hasAll(['noteType', 'content', 'authorEmail', 'authorName', 'createdAt']) &&
           request.resource.data.authorEmail == request.auth.token.email &&
-          request.resource.data.noteType in ['adminToModerator', 'moderatorToAdmin', 'adminToUser'];
+          request.resource.data.noteType in ['adminToModerator', 'moderatorToAdmin', 'adminToUser']);
 
         // UPDATE: Notes are immutable audit logs
         allow update: if false;
@@ -178,6 +254,33 @@ service cloud.firestore {
         // DELETE: Admin only
         allow delete: if isAdmin() || isSuperAdmin();
       }
+    }
+
+    // ============================================
+    // PUBLIC TRACKING COLLECTION (Secure Minimal Tracking Path)
+    // ============================================
+    match /publicTracking/{trackingKey} {
+      // Direct get is allowed ONLY by exact non-guessable tracking key
+      allow get: if true;
+      // Listing or querying the collection is strictly denied
+      allow list: if false;
+      // Creation allowed during complaint filing (guest or authenticated)
+      // Must contain only minimal allowed fields and cannot contain PII
+      allow create: if (!isLicenseExpired() || isSuperAdmin()) &&
+        request.resource.data.keys().hasAll(['ticketId', 'trackingSecret', 'status', 'createdAt', 'updatedAt']) &&
+        !request.resource.data.keys().hasAny([
+          'name', 'email', 'phone', 'employeeId', 'description', 'qtrNo',
+          'personalNo', 'notes', 'userEmail', 'uid', 'imageUrl'
+        ]);
+      // Status updates allowed by authorized staff (Super Admin, Admin, or assigned Moderator)
+      allow update: if isSuperAdmin() || (!isLicenseExpired() && (
+        isAdmin() ||
+        (isModerator() && !isCallerHidden() &&
+         exists(/databases/$(database)/documents/complaints/$(request.resource.data.ticketId)) &&
+         get(/databases/$(database)/documents/complaints/$(request.resource.data.ticketId)).data.assignedToUID == request.auth.uid)
+      ));
+      // Deletion by admin only
+      allow delete: if isAdmin() || isSuperAdmin();
     }
 
     // ============================================

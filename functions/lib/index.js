@@ -41,7 +41,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.assignSuperAdmin = exports.updateLicenseStatus = exports.getManagedUsers = exports.updateUserData = exports.toggleUserActive = exports.toggleUserBlock = exports.updateUserPassword = exports.deleteUser = exports.setUserRole = exports.createModerator = exports.createPrivilegedUser = void 0;
+exports.assignSuperAdmin = exports.updateLicenseStatus = exports.getManagedUsers = exports.toggleUserHidden = exports.updateUserData = exports.toggleUserActive = exports.toggleUserBlock = exports.updateUserPassword = exports.deleteUser = exports.setUserRole = exports.createModerator = exports.createPrivilegedUser = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin SDK
@@ -416,7 +416,7 @@ exports.toggleUserActive = functions.https.onCall(async (data, context) => {
  * Cloud Function: Update User Profile Data
  */
 exports.updateUserData = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     await verifyAdmin(context);
     const { uid, updates } = data;
     if (!uid || !updates) {
@@ -429,6 +429,10 @@ exports.updateUserData = functions.https.onCall(async (data, context) => {
     // Prevent non-super admins from modifying or setting superAdmin
     if ('superAdmin' in updates && ((_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.superAdmin) !== true) {
         throw new functions.https.HttpsError('permission-denied', 'Super Admin authorization required to modify superAdmin status');
+    }
+    // Prevent non-super admins from modifying or setting hidden
+    if ('hidden' in updates && ((_f = (_e = context.auth) === null || _e === void 0 ? void 0 : _e.token) === null || _f === void 0 ? void 0 : _f.superAdmin) !== true) {
+        throw new functions.https.HttpsError('permission-denied', 'Super Admin authorization required to modify hidden status');
     }
     // Escalating role to admin or chief_admin strictly requires Chief Admin permissions
     if (updates.role && ['chief_admin', 'CHIEF_ADMIN', 'admin'].includes(updates.role)) {
@@ -450,9 +454,33 @@ exports.updateUserData = functions.https.onCall(async (data, context) => {
     }
 });
 /**
+ * Cloud Function: Toggle User Hidden Status
+ * Protected: Super Admin custom claim only.
+ * Hiding is reversible. Does NOT delete, block, deactivate, or disable Auth account.
+ * Allows hiding or unhiding any account, including Super Admin accounts and the currently signed-in Super Admin.
+ */
+exports.toggleUserHidden = functions.https.onCall(async (data, context) => {
+    await verifySuperAdmin(context);
+    const { uid, hidden } = data;
+    if (!uid || typeof hidden !== 'boolean') {
+        throw new functions.https.HttpsError('invalid-argument', 'UID and hidden boolean required');
+    }
+    try {
+        await admin.firestore().collection('users').doc(uid).update({
+            hidden,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { success: true, message: `Account hidden status set to ${hidden}` };
+    }
+    catch (error) {
+        console.error('Error toggling hidden status:', error);
+        throw new functions.https.HttpsError('internal', error.message || 'Failed to toggle hidden status');
+    }
+});
+/**
  * Cloud Function: Get Managed Users Directory
  * Returns all users if caller is Super Admin.
- * Excludes Super Admin accounts if caller is Chief Admin or Admin.
+ * Excludes Super Admin accounts and hidden accounts if caller is Chief Admin or Admin.
  */
 exports.getManagedUsers = functions.https.onCall(async (_data, context) => {
     var _a, _b, _c;
@@ -494,16 +522,25 @@ exports.getManagedUsers = functions.https.onCall(async (_data, context) => {
                 phone: d.phone || '',
                 blocked: d.blocked === true,
                 isActive: d.isActive !== false,
+                hidden: d.hidden === true,
                 commentCount: d.commentCount || 0,
                 createdAt: d.createdAt,
                 updatedAt: d.updatedAt,
                 profilePhotoUrl: d.profilePhotoUrl || null,
                 _isSuperAdmin: isSuperAdminAccount,
+                _isHidden: d.hidden === true,
             };
         })
-            .filter((u) => isCallerSuperAdmin || !u._isSuperAdmin)
+            .filter((u) => {
+            if (!isCallerSuperAdmin) {
+                if (u._isSuperAdmin || u._isHidden) {
+                    return false;
+                }
+            }
+            return true;
+        })
             .map((_a) => {
-            var { _isSuperAdmin } = _a, rest = __rest(_a, ["_isSuperAdmin"]);
+            var { _isSuperAdmin, _isHidden } = _a, rest = __rest(_a, ["_isSuperAdmin", "_isHidden"]);
             return rest;
         });
         return { success: true, users };

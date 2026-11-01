@@ -28,6 +28,7 @@ export interface Moderator {
   superAdmin?: boolean;
   isActive?: boolean;
   blocked?: boolean;
+  hidden?: boolean;
   createdAt: any;
 }
 
@@ -70,10 +71,11 @@ export const getAllModerators = async (): Promise<Moderator[]> => {
         superAdmin: data.superAdmin === true,
         isActive: data.isActive !== false,
         blocked: data.blocked === true,
+        hidden: data.hidden === true,
         createdAt: data.createdAt,
       };
     })
-    .filter((m) => !m.superAdmin);
+    .filter((m) => !m.superAdmin && !m.hidden);
 };
 
 /**
@@ -81,12 +83,12 @@ export const getAllModerators = async (): Promise<Moderator[]> => {
  */
 export const getActiveModerators = async (): Promise<Moderator[]> => {
   const allMods = await getAllModerators();
-  return allMods.filter((m) => m.isActive !== false && !m.superAdmin);
+  return allMods.filter((m) => m.isActive !== false && !m.superAdmin && !m.hidden);
 };
 
 /**
  * Subscribe to real-time active moderators from Firestore (Admin only)
- * Filters out moderators where isActive === false or superAdmin === true.
+ * Filters out moderators where isActive === false, superAdmin === true, or hidden === true.
  */
 export const subscribeToActiveModerators = (
   callback: (moderators: Moderator[]) => void
@@ -110,10 +112,11 @@ export const subscribeToActiveModerators = (
             superAdmin: data.superAdmin === true,
             isActive: data.isActive !== false,
             blocked: data.blocked === true,
+            hidden: data.hidden === true,
             createdAt: data.createdAt,
           };
         })
-        .filter((mod) => mod.isActive !== false && !mod.superAdmin);
+        .filter((mod) => mod.isActive !== false && !mod.superAdmin && !mod.hidden);
 
       callback(activeMods);
     },
@@ -189,7 +192,7 @@ export const toggleUserBlock = async (
 export const getBlockedUsers = async (isSuperAdminCaller: boolean = false): Promise<Moderator[]> => {
   const users = await getAllUsers(isSuperAdminCaller);
   return users
-    .filter((u) => u.blocked === true)
+    .filter((u) => u.blocked === true && (isSuperAdminCaller || !u.hidden))
     .map((u) => ({
       id: u.uid || u.id,
       uid: u.uid || u.id,
@@ -201,6 +204,9 @@ export const getBlockedUsers = async (isSuperAdminCaller: boolean = false): Prom
       superAdmin: u.superAdmin === true,
       isActive: u.isActive !== false,
       blocked: true,
+      hidden: u.hidden === true,
       createdAt: u.createdAt,
     }));
 };
+
+export { toggleAccountHidden } from './admin.service';

@@ -143,7 +143,9 @@ const FileComplaint = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [ticketId, setTicketId] = useState('');
+  const [trackingSecret, setTrackingSecret] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedSecret, setCopiedSecret] = useState(false);
   const [submittedData, setSubmittedData] = useState<ComplaintFormData | null>(null);
 
   const getWordCount = (str: string): number => {
@@ -478,6 +480,7 @@ const FileComplaint = () => {
 
       if (result.ticketId) {
         setTicketId(result.ticketId);
+        setTrackingSecret(result.trackingSecret || '');
         setSubmittedData({ ...formData, department: finalDepartment });
         setSubmitted(true);
         setError('');
@@ -548,29 +551,66 @@ const FileComplaint = () => {
                 </p>
               </div>
 
-              {/* Ticket ID Box */}
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-6">
-                <p className="text-xs font-semibold text-[#2563EB] dark:text-blue-300 uppercase tracking-wider mb-1">
-                  Your Unique Ticket ID
-                </p>
-                <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
-                  <span className="font-mono text-xl sm:text-2xl font-extrabold text-[#111827] dark:text-[#F9FAFB]">
-                    {ticketId}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(ticketId);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className="px-3.5 py-1.5 bg-white dark:bg-[#1E232B] hover:bg-slate-50 dark:hover:bg-[#252B35] border border-[#E5E7EB] dark:border-[#2B313B] text-[#2563EB] dark:text-blue-400 rounded-lg transition-colors flex items-center gap-1.5 font-medium text-sm shadow-xs"
-                  >
-                    <Copy className="w-4 h-4" />
-                    {copied ? 'Copied!' : 'Copy Ticket ID'}
-                  </button>
+              {/* Ticket ID & Security Key Boxes */}
+              <div className="grid sm:grid-cols-2 gap-4 mb-6">
+                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5">
+                  <p className="text-xs font-semibold text-[#2563EB] dark:text-blue-300 uppercase tracking-wider mb-1">
+                    Your Unique Ticket ID
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-lg sm:text-xl font-extrabold text-[#111827] dark:text-[#F9FAFB] truncate">
+                      {ticketId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(ticketId);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="px-3 py-1.5 bg-white dark:bg-[#1E232B] hover:bg-slate-50 dark:hover:bg-[#252B35] border border-[#E5E7EB] dark:border-[#2B313B] text-[#2563EB] dark:text-blue-400 rounded-lg transition-colors flex items-center gap-1.5 font-medium text-xs shadow-xs shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
+
+                {trackingSecret && (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Shield className="w-3.5 h-3.5" />
+                      Tracking Security Key
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-sm sm:text-base font-bold text-[#111827] dark:text-[#F9FAFB] truncate" title={trackingSecret}>
+                        {trackingSecret}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(trackingSecret);
+                          setCopiedSecret(true);
+                          setTimeout(() => setCopiedSecret(false), 2000);
+                        }}
+                        className="px-3 py-1.5 bg-white dark:bg-[#1E232B] hover:bg-slate-50 dark:hover:bg-[#252B35] border border-[#E5E7EB] dark:border-[#2B313B] text-emerald-700 dark:text-emerald-400 rounded-lg transition-colors flex items-center gap-1.5 font-medium text-xs shadow-xs shrink-0"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        {copiedSecret ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {trackingSecret && (
+                <div className="mb-6 p-3.5 rounded-xl bg-slate-50 dark:bg-[#12151B] border border-[#E5E7EB] dark:border-[#2B313B] text-xs text-[#4B5563] dark:text-[#9CA3AF] flex items-start gap-2.5">
+                  <Shield className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Privacy Notice:</strong> Direct public reading of full complaint documents is blocked. To track progress publicly without logging in, please save both your Ticket ID and Security Key.
+                  </span>
+                </div>
+              )}
 
               {/* Submission Summary */}
               <div className="mb-8">
@@ -651,7 +691,7 @@ const FileComplaint = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate(`/track-complaint?ticket=${ticketId}`)}
+                  onClick={() => navigate(trackingSecret ? `/track-complaint?ticket=${ticketId}&secret=${trackingSecret}` : `/track-complaint?ticket=${ticketId}`)}
                   className="flex-1 px-5 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl font-semibold text-sm transition-colors shadow-xs flex items-center justify-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />

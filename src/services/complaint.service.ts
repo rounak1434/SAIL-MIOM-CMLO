@@ -53,6 +53,8 @@ export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number] | string;
 export interface Complaint {
   id?: string;
   ticketId?: string;
+  trackingSecret?: string;
+  trackingKey?: string;
   name: string;
   email: string;
   phone: string;
@@ -86,6 +88,31 @@ export interface Complaint {
   siteLocation?: string;
   plantLocationDetails?: string;
 }
+
+export interface PublicComplaintTracking {
+  ticketId: string;
+  trackingSecret?: string;
+  status: 'pending' | 'assigned' | 'active' | 'resolved' | 'rejected';
+  category?: string;
+  department?: string;
+  locationType?: string;
+  selectedLocation?: string;
+  priority?: 'low' | 'medium' | 'high';
+  createdAt: any;
+  updatedAt: any;
+  isMinimalTracking: true;
+}
+
+/**
+ * Generates a cryptographically strong, non-guessable tracking secret
+ */
+export const generateTrackingSecret = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+};
 
 export interface ComplaintStats {
   total: number;
@@ -198,11 +225,11 @@ export const fetchComplaintNotes = async (ticketId: string): Promise<ComplaintNo
 
 /**
  * Create a new complaint using an atomic Firestore transaction
- * Generates official ticket ID: MIOM-0001, MIOM-0002, etc.
+ * Generates official ticket ID: MIOM-EL-YYYY-XXXX and secure public tracking key.
  */
 export const createComplaint = async (
   complaintData: Omit<Complaint, 'id' | 'ticketId' | 'status' | 'notes' | 'createdAt'>
-): Promise<{ success: boolean; ticketId: string }> => {
+): Promise<{ success: boolean; ticketId: string; trackingSecret: string; trackingKey: string }> => {
   const cleanEmail = complaintData.email.trim().toLowerCase();
   const cleanPhone = normalizePhoneNumber(complaintData.phone);
   const sanitizedEmail = cleanEmail.replace(/[^a-z0-9]/g, '_');
@@ -212,7 +239,7 @@ export const createComplaint = async (
   const emailLockRef = doc(db, 'rateLimits', `email_${sanitizedEmail}`);
   const phoneLockRef = doc(db, 'rateLimits', `phone_${cleanPhone}`);
 
-  const ticketId = await runTransaction(db, async (transaction) => {
+  const result = await runTransaction(db, async (transaction) => {
     // 1. Check rate limits inside transaction
     const emailLockDoc = await transaction.get(emailLockRef);
     const phoneLockDoc = await transaction.get(phoneLockRef);
@@ -259,7 +286,11 @@ export const createComplaint = async (
 
     const sequenceStr = String(nextNum).padStart(4, '0');
     const generatedTicketId = `MIOM-EL-${currentYear}-${sequenceStr}`;
+    const trackingSecret = generateTrackingSecret();
+    const trackingKey = `${generatedTicketId}_${trackingSecret}`;
+
     const complaintRef = doc(db, 'complaints', generatedTicketId);
+    const publicTrackingRef = doc(db, 'publicTracking', trackingKey);
 
     // 3. Set Ticket Counter
     transaction.set(
@@ -276,6 +307,8 @@ export const createComplaint = async (
     transaction.set(complaintRef, {
       id: generatedTicketId,
       ticketId: generatedTicketId,
+      trackingSecret,
+      trackingKey,
       name: complaintData.name.trim(),
       email: cleanEmail,
       phone: cleanPhone,
@@ -305,6 +338,20 @@ export const createComplaint = async (
       updatedAt: serverTimestamp(),
     });
 
+    // 4b. Create Public Tracking Document (Strict whitelist, NO PII, NO description, NO contact info)
+    transaction.set(publicTrackingRef, {
+      ticketId: generatedTicketId,
+      trackingSecret,
+      status: 'pending',
+      category: complaintData.category || null,
+      department: complaintData.department.trim(),
+      locationType: complaintData.locationType || null,
+      selectedLocation: complaintData.selectedLocation || null,
+      priority: complaintData.priority || 'medium',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
     // 5. Update Rate Limit locks
     transaction.set(emailLockRef, { lastSubmittedAt: serverTimestamp() });
     transaction.set(phoneLockRef, { lastSubmittedAt: serverTimestamp() });
@@ -319,10 +366,10 @@ export const createComplaint = async (
       { merge: true }
     );
 
-    return generatedTicketId;
+    return { ticketId: generatedTicketId, trackingSecret, trackingKey };
   });
 
-  return { success: true, ticketId };
+  return { success: true, ...result };
 };
 
 /**
@@ -338,6 +385,21 @@ export const getComplaintByTicketId = async (ticketId: string): Promise<Complain
   }
 
   const data = docSnap.data();
+
+  // If the logged-in user is a hidden moderator assigned to this ticket,
+  // omit this complaint from their direct view
+  const currentUid = auth.currentUser?.uid;
+  if (currentUid && data.assignedToUID === currentUid) {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUid));
+      if (userDoc.exists() && userDoc.data().hidden === true) {
+        throw new Error(`Ticket "${cleanId}" not found`);
+      }
+    } catch (userErr: any) {
+      if (userErr.message?.includes('not found')) throw userErr;
+    }
+  }
+
   const notes = await fetchComplaintNotes(cleanId);
 
   return {
@@ -376,98 +438,200 @@ export const subscribeToAllComplaints = (
   const complaintsRef = collection(db, 'complaints');
   const q = query(complaintsRef, orderBy('createdAt', 'desc'));
 
-  return onSnapshot(q, async (snapshot) => {
-    const list: Complaint[] = [];
-
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const notes = await fetchComplaintNotes(docSnap.id);
-
-      list.push({
-        id: docSnap.id,
-        ticketId: data.ticketId || docSnap.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        employeeId: data.employeeId,
-        department: data.department,
-        designation: data.designation,
-        category: data.category,
-        title: data.title,
-        description: data.description,
-        priority: data.priority || 'medium',
-        imageUrl: data.imageUrl,
-        uid: data.uid,
-        userEmail: data.userEmail,
-        status: data.status || 'pending',
-        assignedTo: data.assignedTo,
-        assignedToUID: data.assignedToUID,
-        assignedToName: data.assignedToName,
-        notes,
-        lastCommentAt: data.lastCommentAt,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: Complaint[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ticketId: data.ticketId || docSnap.id,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          employeeId: data.employeeId,
+          department: data.department,
+          designation: data.designation,
+          category: data.category,
+          title: data.title,
+          description: data.description,
+          priority: data.priority || 'medium',
+          imageUrl: data.imageUrl,
+          uid: data.uid,
+          userEmail: data.userEmail,
+          status: data.status || 'pending',
+          assignedTo: data.assignedTo,
+          assignedToUID: data.assignedToUID,
+          assignedToName: data.assignedToName,
+          notes: {
+            adminToModerator: [],
+            moderatorToAdmin: [],
+            adminToUser: [],
+          },
+          lastCommentAt: data.lastCommentAt,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        };
       });
-    }
 
-    callback(list);
-  }, (error) => {
-    console.warn('subscribeToAllComplaints error:', error);
-  });
+      callback(list);
+    },
+    (error) => {
+      console.warn('subscribeToAllComplaints error:', error);
+    }
+  );
 };
 
 /**
  * Real-time subscription to complaints assigned to a specific moderator (Moderator Dashboard)
+ * Enforces account hidden status: if the moderator account is hidden, no complaints
+ * appear in the dashboard or lists. If unhidden, assignments remain intact and become visible again.
  */
 export const subscribeToModeratorComplaints = (
   moderatorUID: string,
   callback: (complaints: Complaint[]) => void
 ): (() => void) => {
-  const complaintsRef = collection(db, 'complaints');
-  const q = query(
-    complaintsRef,
-    where('assignedToUID', '==', moderatorUID),
-    orderBy('createdAt', 'desc')
-  );
+  let unsubscribeComplaints: (() => void) | null = null;
+  let isHidden = false;
 
-  return onSnapshot(q, async (snapshot) => {
-    const list: Complaint[] = [];
-
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const notes = await fetchComplaintNotes(docSnap.id);
-
-      list.push({
-        id: docSnap.id,
-        ticketId: data.ticketId || docSnap.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        employeeId: data.employeeId,
-        department: data.department,
-        designation: data.designation,
-        category: data.category,
-        title: data.title,
-        description: data.description,
-        priority: data.priority || 'medium',
-        imageUrl: data.imageUrl,
-        uid: data.uid,
-        userEmail: data.userEmail,
-        status: data.status,
-        assignedTo: data.assignedTo,
-        assignedToUID: data.assignedToUID,
-        assignedToName: data.assignedToName,
-        notes,
-        lastCommentAt: data.lastCommentAt,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
-      });
+  const startComplaintsListener = () => {
+    if (unsubscribeComplaints) {
+      unsubscribeComplaints();
+      unsubscribeComplaints = null;
     }
 
-    callback(list);
-  }, (error) => {
-    console.warn('subscribeToModeratorComplaints error:', error);
-  });
+    const complaintsRef = collection(db, 'complaints');
+
+    const handleSnapshot = async (snapshot: any) => {
+      if (isHidden) {
+        callback([]);
+        return;
+      }
+
+      const list: Complaint[] = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const notes = await fetchComplaintNotes(docSnap.id).catch((err) => {
+          console.warn(`Could not load notes for complaint ${docSnap.id}:`, err);
+          return {
+            adminToModerator: [],
+            moderatorToAdmin: [],
+            adminToUser: [],
+          };
+        });
+
+        list.push({
+          id: docSnap.id,
+          ticketId: data.ticketId || docSnap.id,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          employeeId: data.employeeId,
+          department: data.department,
+          designation: data.designation,
+          category: data.category,
+          title: data.title,
+          description: data.description,
+          priority: data.priority || 'medium',
+          imageUrl: data.imageUrl,
+          uid: data.uid,
+          userEmail: data.userEmail,
+          status: data.status || 'pending',
+          assignedTo: data.assignedTo,
+          assignedToUID: data.assignedToUID,
+          assignedToName: data.assignedToName,
+          notes,
+          lastCommentAt: data.lastCommentAt,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        });
+      }
+
+      // Guarantee descending order by creation date client-side
+      list.sort((a, b) => {
+        const getMillis = (ts: any) => {
+          if (!ts) return 0;
+          if (typeof ts.toMillis === 'function') return ts.toMillis();
+          if (ts.seconds) return ts.seconds * 1000;
+          const d = new Date(ts).getTime();
+          return isNaN(d) ? 0 : d;
+        };
+        return getMillis(b.createdAt) - getMillis(a.createdAt);
+      });
+
+      callback(list);
+    };
+
+    const attachListener = (withOrderBy: boolean) => {
+      const q = withOrderBy
+        ? query(complaintsRef, where('assignedToUID', '==', moderatorUID), orderBy('createdAt', 'desc'))
+        : query(complaintsRef, where('assignedToUID', '==', moderatorUID));
+
+      return onSnapshot(
+        q,
+        handleSnapshot,
+        (error) => {
+          if (withOrderBy && error.code === 'failed-precondition') {
+            console.warn('Composite index building or missing, falling back to simple query without orderBy:', error);
+            if (unsubscribeComplaints) {
+              unsubscribeComplaints();
+            }
+            unsubscribeComplaints = attachListener(false);
+            return;
+          }
+
+          // If Firestore rules reject query because moderator is hidden, emit empty list
+          if (isHidden || error.code === 'permission-denied') {
+            console.warn('subscribeToModeratorComplaints access denied or account hidden:', error?.message || error?.code);
+            callback([]);
+          } else {
+            console.warn('subscribeToModeratorComplaints error:', error);
+          }
+        }
+      );
+    };
+
+    unsubscribeComplaints = attachListener(true);
+  };
+
+  // Start the complaints listener immediately so complaints stream in on initial load/reload
+  startComplaintsListener();
+
+  // Real-time listener on the moderator's profile to react immediately when hidden / unhidden
+  const userDocRef = doc(db, 'users', moderatorUID);
+  const unsubscribeUser = onSnapshot(
+    userDocRef,
+    (userSnap) => {
+      const userData = userSnap.data();
+      const nowHidden = userData?.hidden === true;
+
+      if (nowHidden !== isHidden) {
+        isHidden = nowHidden;
+        if (nowHidden) {
+          if (unsubscribeComplaints) {
+            unsubscribeComplaints();
+            unsubscribeComplaints = null;
+          }
+          callback([]);
+        } else {
+          startComplaintsListener();
+        }
+      } else if (!nowHidden && !unsubscribeComplaints) {
+        startComplaintsListener();
+      }
+    },
+    (err) => {
+      console.warn('Error listening to moderator user profile in subscribeToModeratorComplaints:', err);
+      if (!unsubscribeComplaints && !isHidden) {
+        startComplaintsListener();
+      }
+    }
+  );
+
+  return () => {
+    if (unsubscribeUser) unsubscribeUser();
+    if (unsubscribeComplaints) unsubscribeComplaints();
+  };
 };
 
 /**
@@ -558,12 +722,22 @@ export const updateComplaintStatus = async (
     }
 
     const prevStatus = complaintDoc.data().status;
+    const trackingKey = complaintDoc.data().trackingKey;
     if (prevStatus === status) return;
 
     transaction.update(complaintRef, {
       status,
       updatedAt: serverTimestamp(),
     });
+
+    // Sync status to public tracking document if exists
+    if (trackingKey) {
+      const publicTrackingRef = doc(db, 'publicTracking', trackingKey);
+      transaction.update(publicTrackingRef, {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     // Adjust counters
     if (prevStatus && status) {
@@ -598,6 +772,7 @@ export const assignComplaint = async (
     }
 
     const prevStatus = complaintDoc.data().status;
+    const trackingKey = complaintDoc.data().trackingKey;
 
     transaction.update(complaintRef, {
       assignedTo: moderatorEmail,
@@ -606,6 +781,15 @@ export const assignComplaint = async (
       status: 'assigned',
       updatedAt: serverTimestamp(),
     });
+
+    // Sync status to public tracking document if exists
+    if (trackingKey) {
+      const publicTrackingRef = doc(db, 'publicTracking', trackingKey);
+      transaction.update(publicTrackingRef, {
+        status: 'assigned',
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     if (prevStatus !== 'assigned') {
       transaction.set(
@@ -679,8 +863,12 @@ export const deleteComplaint = async (id: string): Promise<void> => {
     if (!complaintDoc.exists()) return;
 
     const status = complaintDoc.data().status;
+    const trackingKey = complaintDoc.data().trackingKey;
 
     transaction.delete(complaintRef);
+    if (trackingKey) {
+      transaction.delete(doc(db, 'publicTracking', trackingKey));
+    }
 
     transaction.set(
       statsRef,
@@ -691,4 +879,49 @@ export const deleteComplaint = async (id: string): Promise<void> => {
       { merge: true }
     );
   });
+};
+
+/**
+ * Fetch minimal public tracking information via non-guessable tracking key.
+ * Never returns complainant name, phone, email, employee ID, or description.
+ */
+export const getPublicComplaintStatus = async (
+  ticketId: string,
+  secret?: string
+): Promise<PublicComplaintTracking> => {
+  const cleanTicket = ticketId.trim().toUpperCase();
+  const cleanSecret = secret ? secret.trim() : '';
+
+  let trackingKey = '';
+  if (cleanTicket.includes('_')) {
+    trackingKey = cleanTicket;
+  } else {
+    if (!cleanSecret) {
+      throw new Error('A non-guessable Security Key is required for public tracking.');
+    }
+    trackingKey = `${cleanTicket}_${cleanSecret}`;
+  }
+
+  const docRef = doc(db, 'publicTracking', trackingKey);
+  const docSnap = await getDoc(docRef);
+
+  if (!docSnap.exists()) {
+    throw new Error(`Tracking record not found for Ticket "${cleanTicket}". Please verify the Ticket ID and Security Key.`);
+  }
+
+  const data = docSnap.data();
+
+  return {
+    ticketId: data.ticketId || cleanTicket,
+    trackingSecret: data.trackingSecret,
+    status: data.status || 'pending',
+    category: data.category,
+    department: data.department,
+    locationType: data.locationType,
+    selectedLocation: data.selectedLocation,
+    priority: data.priority || 'medium',
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    isMinimalTracking: true,
+  };
 };

@@ -4,6 +4,7 @@ import { FileText, Clock, TrendingUp, CheckCircle, Eye, MessageSquare, Zap, File
 import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExportLoader';
 import { 
   subscribeToModeratorComplaints, 
+  subscribeToComplaintNotes,
   Complaint,
   updateComplaintStatus,
   addNote,
@@ -26,11 +27,29 @@ const getSpecifiedLocFromDesc = (desc?: string): string => {
 
 
 const ModeratorDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isHidden, userData } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loadingComplaints, setLoadingComplaints] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+
+  // Real-time subscription to notes for selected complaint in modal
+  useEffect(() => {
+    if (!selectedComplaint?.id) return;
+
+    const unsubscribe = subscribeToComplaintNotes(selectedComplaint.id, (notes) => {
+      setSelectedComplaint((prev) => (prev && prev.id === selectedComplaint.id ? { ...prev, notes } : prev));
+    });
+
+    return () => unsubscribe();
+  }, [selectedComplaint?.id]);
   const [moderatorNote, setModeratorNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isHidden || userData?.hidden) {
+      setSelectedComplaint(null);
+    }
+  }, [isHidden, userData?.hidden]);
   
   // Rate limiting for notes (10 second cooldown)
   const {
@@ -43,12 +62,14 @@ const ModeratorDashboard = () => {
   useEffect(() => {
     if (!currentUser?.uid) return;
 
+    setLoadingComplaints(true);
     const unsubscribe = subscribeToModeratorComplaints(currentUser.uid, (data) => {
       setComplaints(data);
+      setLoadingComplaints(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser?.uid]);
 
   const stats = {
     total: complaints.length,
@@ -186,7 +207,12 @@ const ModeratorDashboard = () => {
         <div className="bg-white dark:bg-[#181B21] border border-[#E5E7EB] dark:border-[#2B313B] p-6 rounded-2xl shadow-xs">
           <h3 className="text-xl font-bold mb-5 text-[#111827] dark:text-[#F9FAFB]">Your Assigned Complaints</h3>
           
-          {complaints.length === 0 ? (
+          {loadingComplaints ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2563EB] mx-auto mb-3"></div>
+              <p className="text-[#4B5563] dark:text-[#9CA3AF] text-sm font-medium">Loading your assigned complaints...</p>
+            </div>
+          ) : complaints.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
               <p className="text-[#4B5563] dark:text-[#9CA3AF] text-sm">No complaints currently assigned to you</p>

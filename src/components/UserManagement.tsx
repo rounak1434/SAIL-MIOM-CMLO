@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toggleUserBlock, toggleModeratorStatus } from '../services/moderator.service';
-import { sendUserPasswordReset, updateUserData, getAllUsers } from '../services/admin.service';
-import { Info, Mail, UserPlus } from 'lucide-react';
+import { sendUserPasswordReset, updateUserData, getAllUsers, toggleAccountHidden } from '../services/admin.service';
+import { Info, Mail, UserPlus, Search, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { formatRoleDisplayName } from '../services/auth.service';
 import CreateAdminModal from './CreateAdminModal';
@@ -16,6 +16,7 @@ interface User {
   superAdmin?: boolean;
   blocked?: boolean;
   isActive?: boolean;
+  hidden?: boolean;
   commentCount?: number;
 }
 
@@ -24,7 +25,8 @@ const UserManagement: React.FC = () => {
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'deactivated' | 'blocked'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'deactivated' | 'blocked' | 'hidden'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Modal states
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -42,15 +44,15 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, isChiefAdmin]);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       
-      // Load all registered users / staff via protected server-side directory function
-      // (Super Admin accounts excluded for non-superAdmins by server)
-      const users = await getAllUsers(isSuperAdmin);
+      // Load all registered users / staff via protected server-side directory function or Spark fallback
+      // (Super Admin accounts and hidden accounts excluded for non-superAdmins by server/rules)
+      const users = await getAllUsers(isSuperAdmin, isChiefAdmin);
       const mappedUsers = users.map(u => ({
         id: u.uid || u.id || '',
         email: u.email || '',
@@ -61,6 +63,7 @@ const UserManagement: React.FC = () => {
         superAdmin: u.superAdmin === true,
         blocked: u.blocked === true,
         isActive: u.isActive !== false,
+        hidden: u.hidden === true,
         commentCount: u.commentCount,
       }));
       setAllUsers(mappedUsers);
@@ -106,6 +109,25 @@ const UserManagement: React.FC = () => {
     } catch (error: any) {
       console.error('Error toggling active status:', error);
       alert(error.message || 'Failed to update user active status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleHide = async (uid: string, currentlyHidden: boolean) => {
+    if (!isSuperAdmin) {
+      alert('Only a Super Admin may hide or unhide an account');
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await toggleAccountHidden(uid, !currentlyHidden);
+      await loadUsers();
+      alert(`Account ${!currentlyHidden ? 'hidden' : 'unhidden'} successfully`);
+    } catch (error: any) {
+      console.error('Error toggling hidden status:', error);
+      alert(error.message || 'Failed to update account hidden status');
     } finally {
       setActionLoading(false);
     }
@@ -221,9 +243,30 @@ const UserManagement: React.FC = () => {
     );
   };
 
-  // Enforce Super Admin visibility boundary
-  const visibleUsers = allUsers.filter(u => isSuperAdmin || !u.superAdmin);
-  const visibleBlocked = blockedUsers.filter(u => isSuperAdmin || !u.superAdmin);
+  // Enforce visibility boundaries:
+  // Non-Super Admins: completely omit Super Admin accounts AND hidden accounts
+  const visibleUsers = allUsers.filter(u => isSuperAdmin || (!u.superAdmin && !u.hidden));
+  const visibleBlocked = blockedUsers.filter(u => isSuperAdmin || (!u.superAdmin && !u.hidden));
+  const visibleDeactivated = visibleUsers.filter(u => u.isActive === false);
+  const visibleHidden = allUsers.filter(u => u.hidden === true);
+
+  // Search filtering across user management views
+  const applySearch = (list: User[]) => {
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase().trim();
+    return list.filter(u =>
+      (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+      (u.email && u.email.toLowerCase().includes(q)) ||
+      (u.phone && u.phone.toLowerCase().includes(q)) ||
+      (u.role && u.role.toLowerCase().includes(q))
+    );
+  };
+
+  const filteredAllUsers = applySearch(visibleUsers);
+  const filteredDeactivatedUsers = applySearch(visibleDeactivated);
+  const filteredBlockedUsers = applySearch(visibleBlocked);
+  const filteredHiddenUsers = applySearch(visibleHidden);
 
   if (loading) {
     return (
@@ -254,8 +297,20 @@ const UserManagement: React.FC = () => {
         <Info className="w-4 h-4 text-[#2563EB] dark:text-blue-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-semibold">Account Management Notice: </span>
-          <span>To restrict an account, use <strong>Block</strong> or <strong>Deactivate</strong>. Chief Admins can create Admin, Chief Admin, and Moderator accounts directly.</span>
+          <span>To restrict an account, use <strong>Block</strong>, <strong>Deactivate</strong>{isSuperAdmin ? ', or Hide' : ''}. Chief Admins can create Admin, Chief Admin, and Moderator accounts directly.</span>
         </div>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative mb-5">
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search accounts by name, email, department, or role..."
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181B21] text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-xs"
+        />
       </div>
 
       {/* Tabs */}
@@ -278,7 +333,7 @@ const UserManagement: React.FC = () => {
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
-          Deactivated ({visibleUsers.filter(u => u.isActive === false).length})
+          Deactivated ({visibleDeactivated.length})
         </button>
         <button
           onClick={() => setActiveTab('blocked')}
@@ -290,17 +345,30 @@ const UserManagement: React.FC = () => {
         >
           Blocked Users ({visibleBlocked.length})
         </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => setActiveTab('hidden')}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'hidden'
+                ? 'bg-slate-700 text-white shadow-sm dark:bg-slate-600'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            <span>Hidden Accounts ({visibleHidden.length})</span>
+          </button>
+        )}
       </div>
 
       {/* Deactivated Users List */}
       {activeTab === 'deactivated' && (
         <div className="space-y-4">
-          {visibleUsers.filter(u => u.isActive === false).length === 0 ? (
+          {filteredDeactivatedUsers.length === 0 ? (
             <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">No deactivated accounts</p>
+              <p className="text-slate-500 dark:text-slate-400">No deactivated accounts found</p>
             </div>
           ) : (
-            visibleUsers.filter(u => u.isActive === false).map((user) => (
+            filteredDeactivatedUsers.map((user) => (
               <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -312,6 +380,9 @@ const UserManagement: React.FC = () => {
                       <span>Role:</span>
                       {renderRoleBadge(user.role, user.superAdmin)}
                       <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
+                      {user.hidden && (
+                        <span className="text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">HIDDEN</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -331,6 +402,19 @@ const UserManagement: React.FC = () => {
                         >
                           Edit
                         </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleToggleHide(user.id, user.hidden || false)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                              user.hidden
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-600'
+                            }`}
+                            disabled={actionLoading}
+                          >
+                            {user.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -344,82 +428,104 @@ const UserManagement: React.FC = () => {
       {/* All Users List */}
       {activeTab === 'all' && (
         <div className="space-y-4">
-          {visibleUsers.map((user) => (
-            <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    {user.displayName || user.name || 'Unnamed User'}
-                  </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
-                  <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
-                    <span>Role:</span>
-                    {renderRoleBadge(user.role, user.superAdmin)}
-                    {user.blocked && (
-                      <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
-                    )}
-                    {user.isActive === false && (
-                      <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
+          {filteredAllUsers.length === 0 ? (
+            <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
+              <p className="text-slate-500 dark:text-slate-400">No users found</p>
+            </div>
+          ) : (
+            filteredAllUsers.map((user) => (
+              <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      {user.displayName || user.name || 'Unnamed User'}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
+                      <span>Role:</span>
+                      {renderRoleBadge(user.role, user.superAdmin)}
+                      {user.hidden && (
+                        <span className="text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">HIDDEN</span>
+                      )}
+                      {user.blocked && (
+                        <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
+                      )}
+                      {user.isActive === false && (
+                        <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(!user.superAdmin || isSuperAdmin) && (
+                      <>
+                        <button
+                          onClick={() => handleEditUser(user)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                          disabled={actionLoading}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleChangePassword(user)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                          disabled={actionLoading}
+                        >
+                          Reset Password
+                        </button>
+                        <button
+                          onClick={() => handleToggleBlock(user.id, user.blocked || false, user.superAdmin)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                            user.blocked
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                              : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 dark:text-rose-400 dark:border-rose-500/30'
+                          }`}
+                          disabled={actionLoading}
+                        >
+                          {user.blocked ? 'Unblock' : 'Block'}
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(user.id, user.isActive !== false, user.superAdmin)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                            user.isActive === false
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                              : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-400 dark:border-amber-500/30'
+                          }`}
+                          disabled={actionLoading}
+                        >
+                          {user.isActive === false ? 'Activate' : 'Deactivate'}
+                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleToggleHide(user.id, user.hidden || false)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                              user.hidden
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-600'
+                            }`}
+                            disabled={actionLoading}
+                          >
+                            {user.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(!user.superAdmin || isSuperAdmin) && (
-                    <>
-                      <button
-                        onClick={() => handleEditUser(user)}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                        disabled={actionLoading}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleChangePassword(user)}
-                        className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                        disabled={actionLoading}
-                      >
-                        Reset Password
-                      </button>
-                      <button
-                        onClick={() => handleToggleBlock(user.id, user.blocked || false, user.superAdmin)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
-                          user.blocked
-                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
-                            : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 dark:text-rose-400 dark:border-rose-500/30'
-                        }`}
-                        disabled={actionLoading}
-                      >
-                        {user.blocked ? 'Unblock' : 'Block'}
-                      </button>
-                      <button
-                        onClick={() => handleToggleActive(user.id, user.isActive !== false, user.superAdmin)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
-                          user.isActive === false
-                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
-                            : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-400 dark:border-amber-500/30'
-                        }`}
-                        disabled={actionLoading}
-                      >
-                        {user.isActive === false ? 'Activate' : 'Deactivate'}
-                      </button>
-                    </>
-                  )}
-                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
       {/* Blocked Users List */}
       {activeTab === 'blocked' && (
         <div className="space-y-4">
-          {visibleBlocked.length === 0 ? (
+          {filteredBlockedUsers.length === 0 ? (
             <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">No blocked users</p>
+              <p className="text-slate-500 dark:text-slate-400">No blocked users found</p>
             </div>
           ) : (
-            visibleBlocked.map((user) => (
+            filteredBlockedUsers.map((user) => (
               <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -431,18 +537,98 @@ const UserManagement: React.FC = () => {
                       <span>Role:</span>
                       {renderRoleBadge(user.role, user.superAdmin)}
                       <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
+                      {user.hidden && (
+                        <span className="text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">HIDDEN</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {(!user.superAdmin || isSuperAdmin) && (
-                      <button
-                        onClick={() => handleToggleBlock(user.id, true, user.superAdmin)}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
-                        disabled={actionLoading}
-                      >
-                        Unblock
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleToggleBlock(user.id, true, user.superAdmin)}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                          disabled={actionLoading}
+                        >
+                          Unblock
+                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleToggleHide(user.id, user.hidden || false)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+                              user.hidden
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-600'
+                            }`}
+                            disabled={actionLoading}
+                          >
+                            {user.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                        )}
+                      </>
                     )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Hidden Accounts List (Super Admin only) */}
+      {activeTab === 'hidden' && isSuperAdmin && (
+        <div className="space-y-4">
+          {filteredHiddenUsers.length === 0 ? (
+            <div className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center">
+              <EyeOff className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-50" />
+              <p className="text-slate-500 dark:text-slate-400 font-medium">No hidden accounts found</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                Accounts hidden by a Super Admin will appear here and can be unhidden at any time.
+              </p>
+            </div>
+          ) : (
+            filteredHiddenUsers.map((user) => (
+              <div key={user.id} className="bg-white dark:bg-[#181B21] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      {user.displayName || user.name || 'Unnamed User'}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 items-center">
+                      <span>Role:</span>
+                      {renderRoleBadge(user.role, user.superAdmin)}
+                      <span className="text-slate-700 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">HIDDEN</span>
+                      {user.blocked && (
+                        <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">BLOCKED</span>
+                      )}
+                      {user.isActive === false && (
+                        <span className="text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">DEACTIVATED</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleToggleHide(user.id, true)}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                      disabled={actionLoading}
+                    >
+                      Unhide Account
+                    </button>
+                    <button
+                      onClick={() => handleEditUser(user)}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 dark:border-blue-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                      disabled={actionLoading}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleChangePassword(user)}
+                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-400 dark:border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                      disabled={actionLoading}
+                    >
+                      Reset Password
+                    </button>
                   </div>
                 </div>
               </div>

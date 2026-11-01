@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "setup-admin": "node scripts/setupInitialAdmin.mjs",
     "create-chief-admin": "node scripts/createChiefAdmin.mjs",
-    "test": "node tests/licenseSystem.test.mjs && node tests/superAdminVisibility.test.mjs"
+    "test": "node tests/licenseSystem.test.mjs && node tests/superAdminVisibility.test.mjs && node tests/hideAccount.test.mjs && node tests/assignmentFlow.test.mjs",
+    "test:emulator": "firebase emulators:exec --only firestore \"node tests/assignmentFlow.test.mjs\""
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

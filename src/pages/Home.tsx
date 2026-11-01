@@ -384,7 +384,7 @@ const Home = () => {
                       <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#111318] border border-[#E5E7EB] dark:border-[#2B313B]">
                         <div>
                           <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">
-                            Mohan Nag
+                            Mohan Bopai
                           </p>
                           <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
                             Jr Engg

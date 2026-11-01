@@ -503,6 +503,14 @@ export const updateUserData = functions.https.onCall(async (data, context) => {
     );
   }
 
+  // Prevent non-super admins from modifying or setting hidden
+  if ('hidden' in updates && context.auth?.token?.superAdmin !== true) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Super Admin authorization required to modify hidden status'
+    );
+  }
+
   // Escalating role to admin or chief_admin strictly requires Chief Admin permissions
   if (updates.role && ['chief_admin', 'CHIEF_ADMIN', 'admin'].includes(updates.role)) {
     await verifyChiefAdmin(context);
@@ -532,9 +540,36 @@ export const updateUserData = functions.https.onCall(async (data, context) => {
 });
 
 /**
+ * Cloud Function: Toggle User Hidden Status
+ * Protected: Super Admin custom claim only.
+ * Hiding is reversible. Does NOT delete, block, deactivate, or disable Auth account.
+ * Allows hiding or unhiding any account, including Super Admin accounts and the currently signed-in Super Admin.
+ */
+export const toggleUserHidden = functions.https.onCall(async (data, context) => {
+  await verifySuperAdmin(context);
+
+  const { uid, hidden } = data;
+  if (!uid || typeof hidden !== 'boolean') {
+    throw new functions.https.HttpsError('invalid-argument', 'UID and hidden boolean required');
+  }
+
+  try {
+    await admin.firestore().collection('users').doc(uid).update({
+      hidden,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { success: true, message: `Account hidden status set to ${hidden}` };
+  } catch (error: any) {
+    console.error('Error toggling hidden status:', error);
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to toggle hidden status');
+  }
+});
+
+/**
  * Cloud Function: Get Managed Users Directory
  * Returns all users if caller is Super Admin.
- * Excludes Super Admin accounts if caller is Chief Admin or Admin.
+ * Excludes Super Admin accounts and hidden accounts if caller is Chief Admin or Admin.
  */
 export const getManagedUsers = functions.https.onCall(async (_data, context) => {
   await verifyAdmin(context);
@@ -579,15 +614,24 @@ export const getManagedUsers = functions.https.onCall(async (_data, context) => 
           phone: d.phone || '',
           blocked: d.blocked === true,
           isActive: d.isActive !== false,
+          hidden: d.hidden === true,
           commentCount: d.commentCount || 0,
           createdAt: d.createdAt,
           updatedAt: d.updatedAt,
           profilePhotoUrl: d.profilePhotoUrl || null,
           _isSuperAdmin: isSuperAdminAccount,
+          _isHidden: d.hidden === true,
         };
       })
-      .filter((u) => isCallerSuperAdmin || !u._isSuperAdmin)
-      .map(({ _isSuperAdmin, ...rest }) => rest);
+      .filter((u) => {
+        if (!isCallerSuperAdmin) {
+          if (u._isSuperAdmin || u._isHidden) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map(({ _isSuperAdmin, _isHidden, ...rest }) => rest);
 
     return { success: true, users };
   } catch (error: any) {

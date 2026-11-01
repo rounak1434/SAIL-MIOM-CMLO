@@ -235,6 +235,18 @@ function simulateFirestoreListRule({ auth, queryConstraint }) {
     return { allowed: true, reason: 'SUPER_ADMIN_LIST_ALLOWED' };
   }
 
+  // Chief Admin can query other chief_admin, admin, and moderator accounts
+  if ((auth.token?.role === 'chief_admin' || auth.token?.role === 'CHIEF_ADMIN') &&
+      queryConstraint?.role &&
+      ['chief_admin', 'CHIEF_ADMIN', 'admin', 'moderator'].includes(queryConstraint.role)) {
+    return { allowed: true, reason: 'CHIEF_ADMIN_LIST_ALLOWED' };
+  }
+
+  // Admin can query admin and moderator accounts
+  if (auth.token?.role === 'admin' && queryConstraint?.role && ['admin', 'moderator'].includes(queryConstraint.role)) {
+    return { allowed: true, reason: 'ADMIN_LIST_ALLOWED' };
+  }
+
   // Authenticated staff can query moderators
   const isStaff = auth.token?.role === 'moderator' || auth.token?.role === 'admin' || auth.token?.role === 'chief_admin';
   if (isStaff && queryConstraint?.role === 'moderator') {

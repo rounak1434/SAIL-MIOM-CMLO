@@ -502,7 +502,7 @@ export const subscribeToModeratorComplaints = (
 
     const complaintsRef = collection(db, 'complaints');
 
-    const handleSnapshot = async (snapshot: any) => {
+    const handleSnapshot = (snapshot: any) => {
       if (isHidden) {
         callback([]);
         return;
@@ -511,14 +511,6 @@ export const subscribeToModeratorComplaints = (
       const list: Complaint[] = [];
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        const notes = await fetchComplaintNotes(docSnap.id).catch((err) => {
-          console.warn(`Could not load notes for complaint ${docSnap.id}:`, err);
-          return {
-            adminToModerator: [],
-            moderatorToAdmin: [],
-            adminToUser: [],
-          };
-        });
 
         list.push({
           id: docSnap.id,
@@ -540,7 +532,12 @@ export const subscribeToModeratorComplaints = (
           assignedTo: data.assignedTo,
           assignedToUID: data.assignedToUID,
           assignedToName: data.assignedToName,
-          notes,
+          // Notes load on demand: the open complaint subscribes to them and exports fetch them.
+          notes: {
+            adminToModerator: [],
+            moderatorToAdmin: [],
+            adminToUser: [],
+          },
           lastCommentAt: data.lastCommentAt,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,

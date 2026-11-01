@@ -97,6 +97,25 @@ await runTest('3. subscribeToModeratorComplaints queries where assignedToUID == 
   );
 });
 
+await runTest('3a. Moderator list skips per-complaint notes reads and exports fetch notes on demand', async () => {
+  const complaintServiceContent = fs.readFileSync('src/services/complaint.service.ts', 'utf-8');
+  const moderatorListCode = complaintServiceContent.slice(
+    complaintServiceContent.indexOf('export const subscribeToModeratorComplaints'),
+    complaintServiceContent.indexOf('export const subscribeToComplaintStats')
+  );
+  const exportLoaderContent = fs.readFileSync('src/utils/complaintExportLoader.ts', 'utf-8');
+
+  assert.ok(
+    !moderatorListCode.includes('fetchComplaintNotes('),
+    'subscribeToModeratorComplaints must not read notes for every complaint'
+  );
+  assert.strictEqual(
+    (exportLoaderContent.match(/await withNotes\(complaint\)/g) || []).length,
+    2,
+    'Excel and PDF exports must both fetch notes first'
+  );
+});
+
 await runTest('4. firestore.indexes.json contains required composite index for assignedToUID + createdAt', async () => {
   const indexContent = JSON.parse(fs.readFileSync('firestore.indexes.json', 'utf-8'));
   const complaintsIndex = indexContent.indexes?.find((idx) => {

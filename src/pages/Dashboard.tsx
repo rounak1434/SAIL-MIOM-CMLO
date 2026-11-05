@@ -5,7 +5,9 @@ import {
   Trash2, Eye, UserPlus, Mail, Phone, Building2, Lock, User, Printer, Calendar, ShieldCheck,
   FileSpreadsheet, Download
 } from 'lucide-react';
-import { downloadComplaintExcel, downloadComplaintPDF } from '../utils/complaintExportLoader';
+import { downloadComplaintExcel, downloadComplaintPDF, downloadComplaintListExcel } from '../utils/complaintExportLoader';
+import { getDateRangeError, isWithinDateRange } from '../utils/complaintFilters';
+import { escapeHtml, getComplaintDescription } from '../utils/complaintText';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   subscribeToAllComplaints, 
@@ -38,6 +40,17 @@ const getQtrNoFromDesc = (desc?: string): string => {
   const match = desc.match(/Qtr No\.:\s*([^|\n]+)/i);
   return match ? match[1].trim() : '';
 };
+
+// Status labels as the All Complaints table shows them (unknown statuses display as Pending)
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  assigned: 'Assigned',
+  active: 'Active',
+  resolved: 'Resolved',
+  rejected: 'Rejected',
+};
+
+const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 const getSpecifiedLocFromDesc = (desc?: string): string => {
   if (!desc) return '';
@@ -275,28 +288,63 @@ const Dashboard = () => {
     return matchSearch && matchStatus && matchCategory && matchPriority && matchAssigned;
   });
 
-  // Date-filtered complaints for printing
-  const getDateFilteredComplaints = () => {
-    return filteredComplaints.filter((c) => {
-      const created = parseComplaintDate(c.createdAt);
-      if (!created) return false;
-      if (dateFrom) {
-        const from = new Date(dateFrom);
-        from.setHours(0, 0, 0, 0);
-        if (created < from) return false;
-      }
-      if (dateTo) {
-        const to = new Date(dateTo);
-        to.setHours(23, 59, 59, 999);
-        if (created > to) return false;
-      }
-      return true;
-    });
-  };
-
   // Get complainant name with fallback
   const getComplainantName = (c: Complaint) => {
     return (c as any).name || (c as any).complainantName || (c as any).createdBy || 'N/A';
+  };
+
+  // Complaints shown in the table, printed and exported: every dashboard filter, including the From/To date range
+  const displayedComplaints = filteredComplaints.filter((c) => isWithinDateRange(c.createdAt, dateFrom, dateTo));
+  const dateRangeError = getDateRangeError(dateFrom, dateTo);
+
+  // Shows a YYYY-MM-DD date input value as a local date
+  const formatDateInput = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('en-IN');
+
+  // Export the filtered complaint list to Excel, using the table's columns
+  const handleExportFiltered = async () => {
+    if (dateRangeError) {
+      alert(dateRangeError);
+      return;
+    }
+    if (displayedComplaints.length === 0) {
+      alert('No complaints match the current filters, so there is nothing to export.');
+      return;
+    }
+
+    const rows = displayedComplaints.map((c) => {
+      const assignedMod = moderators.find((m) => m.id === c.assignedToUID);
+      const assignedName = c.assignedToName || 'Unassigned';
+      return {
+        ticketId: c.ticketId || '',
+        name: getComplainantName(c),
+        description: getComplaintDescription(c.description),
+        category: c.category || '',
+        status: STATUS_LABELS[c.status] || STATUS_LABELS.pending,
+        priority: (c.priority || '').toUpperCase(),
+        assignedTo: assignedMod?.isActive === false ? `${assignedName} (Deactivated)` : assignedName,
+      };
+    });
+
+    const appliedFilters: [string, string][] = [
+      ['Exported on', new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })],
+      ['Search', filters.search || 'None'],
+      ['Status', filters.status === 'all' ? 'All Statuses' : STATUS_LABELS[filters.status] || filters.status],
+      ['Category', filters.category === 'all' ? 'All Categories' : filters.category],
+      ['Priority', filters.priority === 'all' ? 'All Priorities' : capitalize(filters.priority)],
+      ['Assignment', filters.assigned === 'all' ? 'All Assignments' : capitalize(filters.assigned)],
+      ['From Date', dateFrom ? formatDateInput(dateFrom) : 'Any'],
+      ['To Date', dateTo ? formatDateInput(dateTo) : 'Any'],
+    ];
+
+    const today = new Date();
+    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    try {
+      await downloadComplaintListExcel(rows, appliedFilters, `complaints-filtered-${stamp}.xlsx`);
+    } catch (error) {
+      console.error('Error exporting filtered complaints:', error);
+      alert('Could not create the Excel file. Please try again.');
+    }
   };
 
   // Print styles shared between print functions
@@ -345,33 +393,55 @@ const Dashboard = () => {
 
   // Print complaints by date range
   const handlePrintByDate = () => {
-    const toPrint = getDateFilteredComplaints();
+    if (dateRangeError) {
+      alert(dateRangeError);
+      return;
+    }
+    const toPrint = displayedComplaints;
     if (toPrint.length === 0) {
       alert('No complaints found in the selected date range.');
       return;
     }
-    const rangeLabel = `${dateFrom ? new Date(dateFrom).toLocaleDateString('en-IN') : 'Start'} — ${dateTo ? new Date(dateTo).toLocaleDateString('en-IN') : 'Now'}`;
+    const rangeLabel = `${dateFrom ? formatDateInput(dateFrom) : 'Start'} — ${dateTo ? formatDateInput(dateTo) : 'Now'}`;
     const rows = toPrint.map(c => `
       <tr>
-        <td class="mono">${c.ticketId || 'N/A'}</td>
-        <td>${getComplainantName(c)}</td>
-        <td>${c.title || ''}</td>
-        <td>${c.category || ''}</td>
-        <td><span class="badge badge-${c.status}">${c.status?.toUpperCase()}</span></td>
-        <td><span class="badge badge-${c.priority}">${c.priority?.toUpperCase()}</span></td>
-        <td>${c.assignedToName || 'Unassigned'}</td>
-        <td>${formatDateForPrint(c.createdAt)}</td>
+        <td class="mono">${escapeHtml(c.ticketId || 'N/A')}</td>
+        <td>${escapeHtml(getComplainantName(c))}</td>
+        <td class="description">${escapeHtml(getComplaintDescription(c.description))}</td>
+        <td>${escapeHtml(c.category || '')}</td>
+        <td><span class="badge badge-${escapeHtml(c.status)}">${escapeHtml(c.status?.toUpperCase())}</span></td>
+        <td><span class="badge badge-${escapeHtml(c.priority)}">${escapeHtml(c.priority?.toUpperCase())}</span></td>
+        <td>${escapeHtml(c.assignedToName || 'Unassigned')}</td>
+        <td>${escapeHtml(formatDateForPrint(c.createdAt))}</td>
       </tr>
     `).join('');
 
+    // Landscape page with fixed column widths so the Description column wraps legibly
+    const rangeReportStyles = `
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        table.range-report { table-layout: fixed; }
+        table.range-report th, table.range-report td { padding: 8px 10px; vertical-align: top; overflow-wrap: anywhere; }
+        table.range-report td { font-size: 12px; }
+        table.range-report td.description { white-space: pre-wrap; line-height: 1.45; }
+        table.range-report tr { break-inside: avoid; page-break-inside: avoid; }
+        table.range-report thead { display: table-header-group; }
+        @media print { body { padding: 0; } table.range-report td { font-size: 10.5px; } }
+      </style>
+    `;
+
     const html = `
-      <!DOCTYPE html><html><head><title>Complaints Report</title>${getPrintStyles()}</head>
+      <!DOCTYPE html><html><head><title>Complaints Report</title>${getPrintStyles()}${rangeReportStyles}</head>
       <body>
         <h1>Complaints Report</h1>
-        <p class="subtitle">Date Range: ${rangeLabel} &nbsp;|&nbsp; Total: ${toPrint.length} complaint(s)</p>
-        <table>
+        <p class="subtitle">Date Range: ${escapeHtml(rangeLabel)} &nbsp;|&nbsp; Total: ${toPrint.length} complaint(s)</p>
+        <table class="range-report">
+          <colgroup>
+            <col style="width:11%"><col style="width:11%"><col style="width:34%"><col style="width:11%">
+            <col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:9%">
+          </colgroup>
           <thead><tr>
-            <th>Ticket ID</th><th>Name</th><th>Title</th><th>Category</th><th>Status</th><th>Priority</th><th>Assigned To</th><th>Date</th>
+            <th>Ticket ID</th><th>Name</th><th>Description</th><th>Category</th><th>Status</th><th>Priority</th><th>Assigned To</th><th>Date</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -907,12 +977,14 @@ const Dashboard = () => {
                 <input
                   type="text"
                   placeholder="Search complaints..."
+                  value={filters.search}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 />
               
                 {/* Status */}
                 <select
+                  value={filters.status}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
                 >
@@ -939,6 +1011,7 @@ const Dashboard = () => {
               
                 {/* Priority */}
                 <select
+                  value={filters.priority}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   onChange={(e) => setFilters(prev => ({ ...prev, priority: e.target.value }))}
                 >
@@ -950,6 +1023,7 @@ const Dashboard = () => {
               
                 {/* Assigned Filter */}
                 <select
+                  value={filters.assigned}
                   className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                   onChange={(e) => setFilters(prev => ({ ...prev, assigned: e.target.value }))}
                 >
@@ -986,8 +1060,13 @@ const Dashboard = () => {
                   <input
                     type="date"
                     value={dateFrom}
+                    max={dateTo || undefined}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    aria-invalid={dateRangeError ? true : undefined}
+                    aria-describedby={dateRangeError ? 'date-range-error' : undefined}
+                    className={`px-3 py-1.5 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                      dateRangeError ? 'border-rose-500' : 'border-[#D1D5DB] dark:border-[#374151]'
+                    }`}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -997,15 +1076,20 @@ const Dashboard = () => {
                   <input
                     type="date"
                     value={dateTo}
+                    min={dateFrom || undefined}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border border-[#D1D5DB] dark:border-[#374151] text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    aria-invalid={dateRangeError ? true : undefined}
+                    aria-describedby={dateRangeError ? 'date-range-error' : undefined}
+                    className={`px-3 py-1.5 rounded-xl bg-white dark:bg-[#111318] text-[#111827] dark:text-[#F9FAFB] border text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                      dateRangeError ? 'border-rose-500' : 'border-[#D1D5DB] dark:border-[#374151]'
+                    }`}
                   />
                 </div>
                 <button
                   onClick={handlePrintByDate}
-                  disabled={!dateFrom && !dateTo}
+                  disabled={(!dateFrom && !dateTo) || !!dateRangeError}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                    dateFrom || dateTo
+                    (dateFrom || dateTo) && !dateRangeError
                       ? 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                   }`}
@@ -1014,7 +1098,25 @@ const Dashboard = () => {
                   <Printer className="w-3.5 h-3.5" />
                   Print Range
                 </button>
+                <button
+                  onClick={handleExportFiltered}
+                  disabled={!!dateRangeError}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    dateRangeError
+                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                  }`}
+                  title="Export complaints matching all filters, including the date range, to Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  Export Filtered Complaints ({dateRangeError ? 0 : displayedComplaints.length})
+                </button>
               </div>
+              {dateRangeError && (
+                <p id="date-range-error" role="alert" className="-mt-3 mb-5 text-xs font-medium text-rose-600 dark:text-rose-400">
+                  {dateRangeError}
+                </p>
+              )}
 
               <div className="overflow-x-auto border border-[#E5E7EB] dark:border-[#2B313B] rounded-xl">
                 <table className="w-full text-left">
@@ -1031,7 +1133,14 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#2B313B]">
-                    {filteredComplaints.map((complaint) => {
+                    {displayedComplaints.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-8 px-4 text-center text-sm text-[#6B7280] dark:text-[#9CA3AF]">
+                          {dateRangeError || 'No complaints match the current filters.'}
+                        </td>
+                      </tr>
+                    )}
+                    {displayedComplaints.map((complaint) => {
                       const assignedMod = moderators.find(m => m.id === complaint.assignedToUID);
                       const isAssignedDeactivated = assignedMod ? assignedMod.isActive === false : false;
                       

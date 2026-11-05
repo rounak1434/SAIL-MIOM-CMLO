@@ -1,5 +1,6 @@
 import { fetchComplaintNotes } from '../services/complaint.service';
 import type { Complaint } from '../services/complaint.service';
+import type { ComplaintListRow } from './complaintListExport';
 
 // Dashboard lists carry empty notes, so read them when someone exports.
 const withNotes = async (complaint: Complaint): Promise<Complaint> => {
@@ -23,4 +24,13 @@ export const downloadComplaintExcel = async (complaint: Complaint) => {
 export const downloadComplaintPDF = async (complaint: Complaint) => {
   const { downloadComplaintPDF: download } = await import('./complaintExport');
   await download(await withNotes(complaint));
+};
+
+export const downloadComplaintListExcel = async (
+  rows: ComplaintListRow[],
+  appliedFilters: [label: string, value: string][],
+  filename: string
+) => {
+  const { downloadComplaintListExcel: download } = await import('./complaintListExport');
+  download(rows, appliedFilters, filename);
 };

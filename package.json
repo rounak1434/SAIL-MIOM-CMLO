@@ -9,12 +9,13 @@
     "preview": "vite preview",
     "setup-admin": "node scripts/setupInitialAdmin.mjs",
     "create-chief-admin": "node scripts/createChiefAdmin.mjs",
-    "test": "node tests/licenseSystem.test.mjs && node tests/superAdminVisibility.test.mjs && node tests/hideAccount.test.mjs && node tests/assignmentFlow.test.mjs",
+    "test": "node tests/licenseSystem.test.mjs && node tests/superAdminVisibility.test.mjs && node tests/hideAccount.test.mjs && node tests/assignmentFlow.test.mjs && node tests/filteredExport.test.mjs",
     "test:emulator": "firebase emulators:exec --only firestore \"node tests/assignmentFlow.test.mjs\""
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
     "clsx": "2.1.1",
+    "fflate": "0.8.3",
     "firebase": "^12.12.0",
     "framer-motion": "^12.38.0",
     "jspdf": "^4.2.1",
